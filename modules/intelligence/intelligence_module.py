@@ -79,13 +79,13 @@ class IntelligenceModule:
             language, _LANGUAGE_INSTRUCTIONS["pt-BR"]
         )
         return f"""Você é um criador de conteúdo especializado no nicho de {niche}.
-{lang_instruction}
-Sua tarefa é gerar conteúdo para YouTube Shorts no formato de card com 3 zonas:
-  - Zona 1: um fato curioso ou insight sobre o vídeo
-  - Zona 3: um comentário autêntico de espectador
+        {lang_instruction}
+        Sua tarefa é gerar conteúdo para YouTube Shorts no formato de card com 3 zonas:
+        - Zona 1: um fato curioso ou insight sobre o vídeo
+        - Zona 3: um comentário autêntico de espectador
 
-Você DEVE retornar apenas um objeto JSON válido, sem texto antes ou depois, sem markdown.
-"""
+        Você DEVE retornar apenas um objeto JSON válido, sem texto antes ou depois, sem markdown.
+        """
 
     def _build_user_prompt(
         self, source: VideoSource, content_cfg: dict, language: str
@@ -98,23 +98,23 @@ Você DEVE retornar apenas um objeto JSON válido, sem texto antes ou depois, se
         ) or "  (nenhum comentário disponível)"
 
         return f"""Vídeo: "{source.title}"
-Canal: {source.channel_name}
-Descrição: {source.description[:500]}
+        Canal: {source.channel_name}
+        Descrição: {source.description[:500]}
 
-Comentários reais do vídeo (use como referência de tom e reação do público):
-{comments_block}
+        Comentários reais do vídeo (use como referência de tom e reação do público):
+        {comments_block}
 
-Gere o conteúdo seguindo EXATAMENTE estas restrições:
-  - curiosity_text: {content_cfg['num_facts']} fato(s) curioso(s) sobre o vídeo. Máximo {content_cfg['curiosity_max_chars']} caracteres.
-  - comment_text: um comentário de espectador autêntico. {tone_instruction} Máximo {content_cfg['comment_max_chars']} caracteres.
-  - hashtags: lista de 3 a 5 hashtags relevantes.
+        Gere o conteúdo seguindo EXATAMENTE estas restrições:
+        - curiosity_text: {content_cfg['num_facts']} fato(s) curioso(s) sobre o vídeo. Máximo {content_cfg['curiosity_max_chars']} caracteres.
+        - comment_text: um comentário de espectador autêntico. {tone_instruction} Máximo {content_cfg['comment_max_chars']} caracteres.
+        - hashtags: lista de 3 a 5 hashtags relevantes.
 
-Retorne SOMENTE este JSON (sem markdown, sem explicações):
-{{
-  "curiosity_text": "...",
-  "comment_text": "...",
-  "hashtags": ["...", "..."]
-}}"""
+        Retorne SOMENTE este JSON (sem markdown, sem explicações):
+        {{
+        "curiosity_text": "...",
+        "comment_text": "...",
+        "hashtags": ["...", "..."]
+        }}"""
 
     def _call_groq(self, system: str, user: str, groq_cfg: dict) -> str:
         response = self._client.chat.completions.create(
@@ -128,11 +128,13 @@ Retorne SOMENTE este JSON (sem markdown, sem explicações):
         )
         return response.choices[0].message.content.strip()
 
+    
     def _parse_response(self, text: str, language: str) -> GeneratedContent:
         """Parseia JSON do LLM com fallback tolerante a markdown."""
         # Remove blocos de código markdown se o modelo insistir em colocá-los
-        clean = re.sub(r"```(?:json)?|```", "", text).strip()
+        clean = clean_json(text) #clean = re.sub(r"```(?:json)?|```", "", text).strip()
         try:
+
             data = json.loads(clean)
         except json.JSONDecodeError as e:
             raise ValueError(
@@ -145,3 +147,13 @@ Retorne SOMENTE este JSON (sem markdown, sem explicações):
             hashtags=data.get("hashtags", []),
             language=language,
         )
+    
+def clean_json(text):
+    # remove blocos ```json ... ```
+    text = re.sub(r"```.*?\n", "", text)
+    text = text.replace("```", "")
+
+    # remove quebras de linha dentro de strings
+    text = re.sub(r'(?<!\\)\n', '\\n', text)
+
+    return text.strip()

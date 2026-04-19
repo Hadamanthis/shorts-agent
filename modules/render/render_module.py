@@ -62,7 +62,7 @@ class RenderModule:
         logger.info(f"[Render] Duração: {duration_seconds:.1f}s → {duration_frames} frames @ {fps}fps")
 
         # 3. Props para o Remotion (só nomes de arquivo — public/ já está sincronizado)
-        props = self._build_props(assets, content, template)
+        props = self._build_props(assets, content, template, fps)
         logger.info(f"[Render] Props: {json.dumps(props, ensure_ascii=False)}")
 
         # 4. Chama o Remotion CLI
@@ -100,24 +100,20 @@ class RenderModule:
         # bg_looped.mp4 — sempre regera para bater com a duração atual do clip
         bg_src = assets.background_video_path
         bg_looped = PUBLIC_DIR / "bg_looped.mp4"
-        total_seconds = duration_seconds + 5.0
-
         logger.info(f"[Render] Gerando bg_looped.mp4 com {duration_seconds:.1f}s via FFmpeg...")
-
         ffmpeg_loop_cmd = [
             "ffmpeg", "-y",
             "-stream_loop", "-1",
             "-i", str(bg_src.resolve()),
-            "-vf", f"fps={fps}",          # só converte fps, sem mexer em timebase
-            "-t", str(total_seconds),
+            "-t", str(duration_seconds + 2),   # +2s de margem
+            "-vf", f"fps={fps}",              # converte framerate
             "-c:v", "libx264",
             "-an",
             "-preset", "fast",
             "-pix_fmt", "yuv420p",
-            "-avoid_negative_ts", "make_zero",   # ← evita timestamps negativos no loop
+            "-video_track_timescale", str(fps), # timebase 1/fps — elimina o bug do Remotion
             str(bg_looped),
         ]
-
         result = subprocess.run(ffmpeg_loop_cmd, capture_output=True, text=True, timeout=120)
         if result.returncode != 0:
             raise RuntimeError(f"FFmpeg falhou ao gerar bg_looped.mp4:\n{result.stderr}")
@@ -149,15 +145,15 @@ class RenderModule:
         self,
         assets: PreparedAssets,
         content: GeneratedContent,
-        template: str
+        template: str,
+        fps: int,
     ) -> dict:
         base = {
-            "hook": content.curiosity_text,
-            "story": content.story_text,
+            "hook": content.curiosity_text.title(),
             "comentario": content.comment_text,
             "nome": assets.account_name,
             "avatar": assets.avatar_path.name,
-            "bgVideo": "bg_looped.mp4",   # gerado pelo Python com duração exata
+            "bgVideo": "bg_looped.mp4",
         }
 
         if template == "ComentarioVideo":
@@ -166,6 +162,7 @@ class RenderModule:
             if not assets.image_path:
                 raise ValueError("ComentarioImagem requer image_path nos assets.")
             base["imagem"] = assets.image_path.name
+            base["story"] = content.story_text  # só ComentarioImagem usa story
 
         return base
 

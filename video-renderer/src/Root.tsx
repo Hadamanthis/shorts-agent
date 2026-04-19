@@ -1,50 +1,48 @@
 import { Composition } from 'remotion';
-import { ComentarioVideo, ComentarioVideoProps } from './templates/ComentarioVideo';
-import { ComentarioImagem, ComentarioImagemProps } from './templates/ComentarioImagem';
+import { ComentarioVideo } from './templates/ComentarioVideo';
+import type { ComentarioVideoProps } from './templates/ComentarioVideo';
+import { ComentarioImagem } from './templates/ComentarioImagem';
+import type { ComentarioImagemProps } from './templates/ComentarioImagem';
 
-// Valores usados APENAS no Remotion Studio (preview).
-// Em produção, --duration e --fps passados pelo Python sobrescrevem tudo isso.
-const PREVIEW_DURATION_SEC = 30;
 const FPS = 30;
-const PREVIEW_FRAMES = PREVIEW_DURATION_SEC * FPS;
+const PREVIEW_FRAMES = 30 * FPS; // 30s — só para o Studio
 
-export const RemotionRoot = () => {
+export const RemotionRoot: React.FC = () => {
   return (
     <>
-      <Composition<ComentarioVideoProps>
+      <Composition
         id="ComentarioVideo"
-        component={ComentarioVideo}
+        component={ComentarioVideo as React.FC<ComentarioVideoProps>}
         durationInFrames={PREVIEW_FRAMES}
         fps={FPS}
         width={1080}
         height={1920}
         defaultProps={{
-          hook: 'Você não vai acreditar no que aconteceu aqui...',
-          story: 'Contexto da imagem aparece aqui. Três a cinco frases contando o que aconteceu e por que viralizou.',
-          comentario: 'Isso me surpreendeu demais quando vi pela primeira vez!',
+          hook: 'No Japão, bêbados dormem na rua sem ser perturbados',
+          comentario: 'Isso muda tudo que eu aprendi sobre segurança pública.',
           nome: 'carlos.silva',
           video: 'video.mp4',
           avatar: 'avatar.png',
           bgVideo: 'bg_looped.mp4',
-        }}
+        } satisfies ComentarioVideoProps}
       />
 
-      <Composition<ComentarioImagemProps>
+      <Composition
         id="ComentarioImagem"
-        component={ComentarioImagem}
+        component={ComentarioImagem as React.FC<ComentarioImagemProps>}
         durationInFrames={PREVIEW_FRAMES}
         fps={FPS}
         width={1080}
         height={1920}
         defaultProps={{
-          hook: 'Você não vai acreditar no que aconteceu aqui...',
-          story: 'Contexto da imagem aparece aqui. Três a cinco frases contando o que aconteceu e por que viralizou.',
-          comentario: 'Isso me surpreendeu demais quando vi pela primeira vez!',
+          hook: 'Em 1888, abolir escravidão era destruir a economia',
+          story: 'O story gerado pelo LLM aparece aqui. Denso, informativo, sem perguntas no final.',
+          comentario: 'A história que não te contaram na escola.',
           nome: 'carlos.silva',
           imagem: 'thumbnail.jpg',
           avatar: 'avatar.png',
           bgVideo: 'bg_looped.mp4',
-        }}
+        } satisfies ComentarioImagemProps}
       />
     </>
   );

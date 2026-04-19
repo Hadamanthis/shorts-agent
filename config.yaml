@@ -16,6 +16,7 @@ profiles:
     account_name: "cinéfilo.br"
     avatar_path: "assets/profiles/avatar_br.png"
     background_video: "assets/backgrounds/bg_default.mp4"
+    music_path: "assets/music/bg_music.mp3"
 
   FilmFactsEN:
     language: "en-US"
@@ -23,6 +24,7 @@ profiles:
     account_name: "filmfacts.clip"
     avatar_path: "assets/profiles/avatar_en.png"
     background_video: "assets/backgrounds/bg_default.mp4"
+    music_path: "assets/music/bg_music.mp3"
 
 # -----------------------------------------------------------------------------
 # PARÂMETROS DO VÍDEO DE ENTRADA
@@ -56,7 +58,7 @@ content:
   curiosity_max_chars: 120
 
   # Tamanho máximo do comentário fictício (zona 3) em caracteres
-  comment_max_chars: 100
+  comment_max_chars: 200
 
   # Tom do comentário gerado: "surpreso", "humoristico", "reflexivo", "emocional"
   comment_tone: "surpreso"
@@ -118,7 +120,7 @@ image_ingestion:
   min_score: 1000
 
   # Máximo de comentários do Reddit a buscar para contexto do LLM
-  max_comments: 5
+  max_comments: 10
 
   # Duração do short gerado (em segundos) — não há clip, então é fixa
   short_duration: 30

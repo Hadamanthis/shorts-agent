@@ -4,7 +4,7 @@ dist
 .env
 venv/
 logs/
-assets/
+/assets/
 /output/
 public
 
