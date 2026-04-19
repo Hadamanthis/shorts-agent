@@ -5,7 +5,7 @@ dist
 venv/
 logs/
 assets/
-output/
+/output/
 public
 
 # Ignore the output video from Git but not videos you import into src/.

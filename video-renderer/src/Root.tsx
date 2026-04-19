@@ -2,47 +2,48 @@ import { Composition } from 'remotion';
 import { ComentarioVideo, ComentarioVideoProps } from './templates/ComentarioVideo';
 import { ComentarioImagem, ComentarioImagemProps } from './templates/ComentarioImagem';
 
-// durationInFrames é sobrescrito pelo Python via --props no momento do render.
-// Os valores aqui são apenas para o Remotion Studio (preview).
-const DEFAULT_DURATION = 30 * 30; // 30 segundos a 30fps
+// Valores usados APENAS no Remotion Studio (preview).
+// Em produção, --duration e --fps passados pelo Python sobrescrevem tudo isso.
+const PREVIEW_DURATION_SEC = 30;
 const FPS = 30;
+const PREVIEW_FRAMES = PREVIEW_DURATION_SEC * FPS;
 
 export const RemotionRoot = () => {
   return (
     <>
-      {/* Template com vídeo no meio */}
       <Composition<ComentarioVideoProps>
         id="ComentarioVideo"
         component={ComentarioVideo}
-        durationInFrames={DEFAULT_DURATION}
+        durationInFrames={PREVIEW_FRAMES}
         fps={FPS}
         width={1080}
         height={1920}
         defaultProps={{
           hook: 'Você não vai acreditar no que aconteceu aqui...',
+          story: 'Contexto da imagem aparece aqui. Três a cinco frases contando o que aconteceu e por que viralizou.',
           comentario: 'Isso me surpreendeu demais quando vi pela primeira vez!',
           nome: 'carlos.silva',
           video: 'video.mp4',
           avatar: 'avatar.png',
-          bgVideo: 'bg.mp4',
+          bgVideo: 'bg_looped.mp4',
         }}
       />
 
-      {/* Template com imagem estática no meio */}
       <Composition<ComentarioImagemProps>
         id="ComentarioImagem"
         component={ComentarioImagem}
-        durationInFrames={DEFAULT_DURATION}
+        durationInFrames={PREVIEW_FRAMES}
         fps={FPS}
         width={1080}
         height={1920}
         defaultProps={{
           hook: 'Você não vai acreditar no que aconteceu aqui...',
+          story: 'Contexto da imagem aparece aqui. Três a cinco frases contando o que aconteceu e por que viralizou.',
           comentario: 'Isso me surpreendeu demais quando vi pela primeira vez!',
           nome: 'carlos.silva',
           imagem: 'thumbnail.jpg',
           avatar: 'avatar.png',
-          bgVideo: 'bg.mp4',
+          bgVideo: 'bg_looped.mp4',
         }}
       />
     </>

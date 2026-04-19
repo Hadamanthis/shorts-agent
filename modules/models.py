@@ -50,15 +50,13 @@ class ImageSource:
             "origin": self.origin,
         }
 
-    
 @dataclass
 class GeneratedContent:
-    """Resultado do módulo de Intelligence."""
-    curiosity_text: str                # Zona 1 do card
-    comment_text: str                  # Zona 3 do card
+    curiosity_text: str      # Zona 1 — hook curto (≤ 12 palavras), pergunta ou afirmação chocante
+    comment_text: str        # Zona 3 — reação que provoca comentários
+    story_text: str = ""         # Zona 2: narrativa da imagem (3–5 frases), o "o que aconteceu"
     hashtags: list[str] = field(default_factory=list)
     language: str = "pt-BR"
-
 
 @dataclass
 class PreparedAssets:

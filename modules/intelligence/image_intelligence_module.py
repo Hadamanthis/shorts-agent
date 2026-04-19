@@ -95,59 +95,68 @@ class ImageIntelligenceModule:
             ".gif": "image/gif",
         }.get(ext, "image/jpeg")
 
-    def _build_messages(
-        self,
-        image_b64: str,
-        media_type: str,
-        image_source: ImageSource,
-        content_cfg: dict,
-        language: str,
-        niche: str,
-    ) -> list[dict]:
+    def _build_messages(self, image_b64, media_type, image_source,
+                    content_cfg, language, niche) -> list[dict]:
         lang_instruction = _LANGUAGE_INSTRUCTIONS.get(language, _LANGUAGE_INSTRUCTIONS["pt-BR"])
         tone_instruction = _TONE_INSTRUCTIONS.get(
             content_cfg["comment_tone"], _TONE_INSTRUCTIONS["surpreso"]
         )
 
-        # Contexto textual (Reddit title + comentários, se houver)
         context_block = ""
         if image_source.title:
             context_block += f'Título do post: "{image_source.title}"\n'
         if image_source.context_comments:
             context_block += "Comentários reais sobre essa imagem:\n"
-            context_block += "\n".join(f"  - {c}" for c in image_source.context_comments)
+            context_block += "\n".join(f"  - {c}" for c in image_source.context_comments[:5])
             context_block += "\n"
 
-        system_prompt = (
-            f"Você é um criador de conteúdo especializado no nicho de {niche}. "
-            f"{lang_instruction} "
-            f"Retorne SOMENTE um objeto JSON válido, sem texto antes ou depois, sem markdown."
-        )
+        # ─── SYSTEM: define o papel do modelo ───────────────────────────────────
+        system_prompt = f"""Você é um roteirista de YouTube Shorts virais no nicho de {niche}.
+            {lang_instruction}
+            Sua única saída é um objeto JSON válido, sem texto antes ou depois, sem markdown.
 
+            Você gera conteúdo para um short de 45–60 segundos com 3 partes:
+
+            REGRAS para cada campo:
+            - hook: frase curta (≤ 12 palavras) que cria urgência ou choque imediato.
+            Prefira perguntas, afirmações incompletas ou revelações surpreendentes.
+            NUNCA use "Você sabia", "Descubra", "Confira" ou "Incrível".
+            Exemplo bom: "Isso aconteceu num condomínio normal do Brasil"
+            Exemplo bom: "Por que esse cara está sorrindo depois de perder tudo?"
+
+            - story: 3 a 5 frases contando O QUE É a imagem e POR QUE viralizou.
+            Escreva como se estivesse contando para um amigo, com detalhes concretos.
+            Use o título e os comentários do Reddit como base — não invente fatos.
+            Termine com uma frase que deixa o espectador querendo sua opinião.
+            Máximo {content_cfg['curiosity_max_chars']} caracteres.
+
+            - comment: reação de 2–3 frases que TOMA PARTIDO (nunca neutro).
+            Pode ser indignação, humor, espanto genuíno ou concordância entusiasmada.
+            A última frase DEVE convidar o espectador a comentar.
+            {tone_instruction}
+            Máximo {content_cfg['comment_max_chars']} caracteres.
+
+            - hashtags: 3 a 5 hashtags relevantes."""
+
+        # ─── USER: contexto + imagem ─────────────────────────────────────────────
         user_text = f"""{context_block}
-Analise a imagem acima e gere conteúdo para um YouTube Short no formato card com 3 zonas:
-  - hook: {content_cfg['num_facts']} frase(s) de gancho que desperte curiosidade sobre o que está na imagem. Máximo {content_cfg['curiosity_max_chars']} caracteres.
-  - comentario: um comentário de espectador autêntico. {tone_instruction} Máximo {content_cfg['comment_max_chars']} caracteres.
-  - hashtags: lista de 3 a 5 hashtags relevantes.
+            Analise a imagem e gere o conteúdo seguindo exatamente as regras do sistema.
 
-Retorne SOMENTE este JSON:
-{{
-  "curiosity_text": "...",
-  "comment_text": "...",
-  "hashtags": ["...", "..."]
-}}"""
+            Retorne SOMENTE este JSON:
+            {{
+            "hook": "...",
+            "story": "...",
+            "comment": "...",
+            "hashtags": ["...", "..."]
+            }}"""
 
         return [
             {"role": "system", "content": system_prompt},
             {
                 "role": "user",
                 "content": [
-                    {
-                        "type": "image_url",
-                        "image_url": {
-                            "url": f"data:{media_type};base64,{image_b64}"
-                        },
-                    },
+                    {"type": "image_url",
+                    "image_url": {"url": f"data:{media_type};base64,{image_b64}"}},
                     {"type": "text", "text": user_text},
                 ],
             },
@@ -169,9 +178,11 @@ Retorne SOMENTE este JSON:
         except json.JSONDecodeError as e:
             raise ValueError(f"LLM não retornou JSON válido: {e}\nResposta:\n{text}")
 
+        # Suporte aos nomes novos (hook/story/comment) e antigos (curiosity_text/comment_text)
         return GeneratedContent(
-            curiosity_text=data.get("curiosity_text", "").strip(),
-            comment_text=data.get("comment_text", "").strip(),
+            curiosity_text=data.get("hook", data.get("curiosity_text", "")).strip(),
+            story_text=data.get("story", "").strip(),          # ← campo novo
+            comment_text=data.get("comment", data.get("comment_text", "")).strip(),
             hashtags=data.get("hashtags", []),
             language=language,
         )

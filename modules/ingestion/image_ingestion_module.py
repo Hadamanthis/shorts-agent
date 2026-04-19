@@ -53,7 +53,7 @@ def save_image_source(src: ImageSource) -> Path:
         "context_comments": src.context_comments,
         "subreddit": src.subreddit,
     }
-    path.write_text(json.dumps(data, ensure_ascii=False, indent=2))
+    path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
     logger.info(f"[ImageIngestion] Cache salvo: {path}")
     return path
 
@@ -63,7 +63,7 @@ def load_image_source(url: str) -> Optional[ImageSource]:
     path = CACHE_DIR / f"image_{cache_id}.json"
     if not path.exists():
         return None
-    data = json.loads(path.read_text())
+    data = json.loads(path.read_text(encoding="utf-8"))
     src = ImageSource(
         origin=data["origin"],
         image_path=Path(data["image_path"]),

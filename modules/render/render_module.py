@@ -62,7 +62,7 @@ class RenderModule:
         logger.info(f"[Render] Duração: {duration_seconds:.1f}s → {duration_frames} frames @ {fps}fps")
 
         # 3. Props para o Remotion (só nomes de arquivo — public/ já está sincronizado)
-        props = self._build_props(assets, content, template, fps)
+        props = self._build_props(assets, content, template)
         logger.info(f"[Render] Props: {json.dumps(props, ensure_ascii=False)}")
 
         # 4. Chama o Remotion CLI
@@ -100,18 +100,24 @@ class RenderModule:
         # bg_looped.mp4 — sempre regera para bater com a duração atual do clip
         bg_src = assets.background_video_path
         bg_looped = PUBLIC_DIR / "bg_looped.mp4"
+        total_seconds = duration_seconds + 5.0
+
         logger.info(f"[Render] Gerando bg_looped.mp4 com {duration_seconds:.1f}s via FFmpeg...")
+
         ffmpeg_loop_cmd = [
             "ffmpeg", "-y",
             "-stream_loop", "-1",
             "-i", str(bg_src.resolve()),
-            "-t", str(duration_seconds),
-            "-r", str(fps),              # força FPS igual ao da composição Remotion
+            "-vf", f"fps={fps}",          # só converte fps, sem mexer em timebase
+            "-t", str(total_seconds),
             "-c:v", "libx264",
             "-an",
             "-preset", "fast",
+            "-pix_fmt", "yuv420p",
+            "-avoid_negative_ts", "make_zero",   # ← evita timestamps negativos no loop
             str(bg_looped),
         ]
+
         result = subprocess.run(ffmpeg_loop_cmd, capture_output=True, text=True, timeout=120)
         if result.returncode != 0:
             raise RuntimeError(f"FFmpeg falhou ao gerar bg_looped.mp4:\n{result.stderr}")
@@ -143,11 +149,11 @@ class RenderModule:
         self,
         assets: PreparedAssets,
         content: GeneratedContent,
-        template: str,
-        fps: int,
+        template: str
     ) -> dict:
         base = {
             "hook": content.curiosity_text,
+            "story": content.story_text,
             "comentario": content.comment_text,
             "nome": assets.account_name,
             "avatar": assets.avatar_path.name,
