@@ -1,0 +1,26 @@
+# Shorts Agent — Dependências
+
+# Download e metadados de vídeos
+yt-dlp>=2024.1.0
+
+# LLM via Groq
+groq>=0.9.0
+
+# Composição de vídeo
+moviepy>=2.0.0
+
+# Processamento de imagem (cards, texto, avatar)
+Pillow>=10.0.0
+
+# Configuração
+PyYAML>=6.0
+python-dotenv>=1.0.0
+
+# Tipagem (Python 3.10+ já inclui, mas por compatibilidade)
+typing-extensions>=4.0.0
+
+# ---- Dependências de sistema (instalar separadamente) ----
+# FFmpeg: https://ffmpeg.org/download.html
+#   Ubuntu/Debian: sudo apt install ffmpeg
+#   Mac:           brew install ffmpeg
+#   Windows:       https://www.gyan.dev/ffmpeg/builds/
