@@ -52,8 +52,11 @@ class GeneratedContent:
     curiosity_text: str          # hook curto (zona 1)
     comment_text: str            # comentário (zona 3)
     story_text: str = ""         # narrativa da imagem (zona 2)
+    highlights: list[str] = field(default_factory=list)
     hashtags: list[str] = field(default_factory=list)
     language: str = "pt-BR"
+    youtube_title: str = ""      # título para upload no YouTube
+    youtube_description: str = ""  # descrição para upload no YouTube
 
 
 @dataclass

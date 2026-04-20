@@ -10,11 +10,11 @@
 # Use --profile <nome> na CLI para selecionar.
 # -----------------------------------------------------------------------------
 profiles:
-  CuriosidadesBR:
+  Synthvator:
     language: "pt-BR"
     niche: "filmes e séries"
-    account_name: "cinéfilo.br"
-    avatar_path: "assets/profiles/avatar_br.png"
+    account_name: "SynthvatorComenta"
+    avatar_path: "assets/profiles/synthvator.png"
     background_video: "assets/backgrounds/bg_default.mp4"
     music_path: "assets/music/bg_music.mp3"
 
@@ -44,7 +44,7 @@ video:
 
   # Número de comentários a exibir como insumo no prompt do LLM
   # (os mais curtidos dentre os coletados)
-  top_comments_for_context: 5
+  top_comments_for_context: 10
 
 # -----------------------------------------------------------------------------
 # PARÂMETROS DO CONTEÚDO GERADO PELO LLM
@@ -61,7 +61,7 @@ content:
   comment_max_chars: 200
 
   # Tom do comentário gerado: "surpreso", "humoristico", "reflexivo", "emocional"
-  comment_tone: "surpreso"
+  comment_tone: "humoristico"
 
 # -----------------------------------------------------------------------------
 # PARÂMETROS DO LAYOUT (card 9:16)

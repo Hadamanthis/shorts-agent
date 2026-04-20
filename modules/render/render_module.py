@@ -98,8 +98,10 @@ class RenderModule:
         clip/imagem — sempre sobrescreve (muda a cada vídeo).
         """
         # bg_looped.mp4 — sempre regera para bater com a duração atual do clip
-        bg_src = assets.background_video_path
+        bg_src = assets.background_video_path  # agora aponta para bg_3min.mp4
         bg_looped = PUBLIC_DIR / "bg_looped.mp4"
+        if not bg_looped.exists():  # só copia se não existir
+            shutil.copy2(bg_src, bg_looped)
         logger.info(f"[Render] Gerando bg_looped.mp4 com {duration_seconds:.1f}s via FFmpeg...")
         ffmpeg_loop_cmd = [
             "ffmpeg", "-y",
@@ -163,6 +165,9 @@ class RenderModule:
                 raise ValueError("ComentarioImagem requer image_path nos assets.")
             base["imagem"] = assets.image_path.name
             base["story"] = content.story_text  # só ComentarioImagem usa story
+            base["highlights"] = content.highlights
+            if assets.music_path:
+                base["music"] = "bg_music.mp3"
 
         return base
 

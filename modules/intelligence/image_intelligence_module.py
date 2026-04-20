@@ -78,20 +78,22 @@ class ImageIntelligenceModule:
 
         system_prompt = f"""Você é um roteirista de YouTube Shorts virais no nicho de {niche}.
 {lang_instruction}
-Sua única saída é um objeto JSON válido, sem texto antes ou depois, sem markdown.
+Sua única saída é um objeto JSON válido, sem texto antes ou depois, sem markdown, não use triplas aspas.
 
 Você gera conteúdo para um short de 45–60 segundos. Regras por campo:
 
-HOOK — Fato factual em UMA linha. Máximo 8 palavras.
-- Concreto: datas, lugares, números, comportamentos específicos.
-- Sem opinião, sem adjetivo emocional, sem verbo de comando.
-- Exemplos certos:  "No Japão, bêbados dormem na rua sem ser perturbados"
-                    "Em 1888, abolir escravidão era 'destruir a economia'"
-- Exemplos errados: "Isso vai te surpreender!" / "Fato incrível sobre o Japão"
-Máximo {content_cfg['curiosity_max_chars']} caracteres.
+HOOK — Manchete de jornal sensacionalista mas factual. Máximo 10 palavras.
+  - Tom de manchete: direto, impactante, pode usar contraste ou ironia.
+  - Use fatos reais: datas, lugares, números, nomes.
+  - Pode exagerar o drama sem mentir.
+  - Exemplos: "Boston Enterrou Carros Vivos na Neve por Meses"
+              "A URSS Classificava Criminosos Pela Cara — E Acertava Poucos"
+              "Prefeitura Gastou Zero Reais Para 'Sumir' Com 6 Carros"
+  - NUNCA use: "Incrível", "Chocante", "Você não vai acreditar".
+  Máximo {content_cfg['curiosity_max_chars']} caracteres.
 
 STORY — A história por trás da imagem. Informativo, denso, envolvente.
-- Use o título e comentários do Reddit como base — não invente fatos.
+- Use o título e comentários do Reddit como base — não invente fatos, pesquise na internet para ter mais contexto.
 - Escreva como um parágrafo de enciclopédia reescrito por alguém que adora contar histórias.
 - Inclua: contexto histórico, como funcionava na prática, detalhes específicos e curiosos,
   consequências ou comparações que ajudem o espectador a visualizar.
@@ -99,6 +101,15 @@ STORY — A história por trás da imagem. Informativo, denso, envolvente.
 - Termine com uma afirmação conclusiva — sem perguntas, sem convites a comentar.
   Isso é papel do COMMENT, não do STORY.
 - Mínimo 4 frases, máximo 7. Máximo {content_cfg['curiosity_max_chars'] * 3} caracteres.
+
+HIGHLIGHTS — Palavras ou expressões que trazem a maior parte do contexto e são as mais relevantes no que você escreveu.
+  REGRAS OBRIGATÓRIAS:
+  - O PRIMEIRO item deve ser uma palavra ou expressão presente no HOOK que você escreveu, escrita exatamente igual.
+  - Os demais (mínimo 2, máximo 5) devem ser palavras ou expressões presentes no STORY que você escreveu, escritas exatamente igual.
+    — copie exatamente como escreveu, incluindo acentos e maiúsculas.
+  - Escolha: datas, nomes de lugares, números com unidade, nomes próprios que tenham a maior relevância para o contexto.
+  - NUNCA inclua somente artigos, preposições ou palavras comuns ("o", "de", "em", "e").
+  - Total: mínimo 3 itens, máximo 6 itens.
 
 COMMENT — 2 frases curtas. Escreva como uma pessoa real comentando no YouTube.
 Imagine alguém que acabou de ler o story e teve uma reação genuína no calor do momento.
@@ -125,7 +136,18 @@ NUNCA termine com reticências (...).
 {tone_instruction}
 Máximo {content_cfg['comment_max_chars']} caracteres.
 
-HASHTAGS — 3 a 5 hashtags relevantes."""
+HASHTAGS — 3 a 5 hashtags relevantes.
+
+YOUTUBE_TITLE — Título do Short para o YouTube. Máximo 70 caracteres.
+- Deve chamar atenção, usar o hook como base mas pode ser ligeiramente diferente.
+- Pode usar emojis (1 no máximo).
+- Exemplo: "A polícia soviética tinha um catálogo de rostos étnicos 😶"
+
+YOUTUBE_DESCRIPTION — Descrição do Short. 3 a 5 linhas.
+- Primeira linha: expansão do hook (1 frase impactante).
+- Segunda linha: o que o espectador vai descobrir assistindo.
+- Terceira linha: as hashtags separadas por espaço.
+- Tom: direto, sem clickbait óbvio, sem emojis em excesso."""
 
         user_text = f"""{context_block}
 Analise a imagem e gere o conteúdo seguindo exatamente as regras do sistema.
@@ -135,7 +157,10 @@ Retorne SOMENTE este JSON:
   "hook": "...",
   "story": "...",
   "comment": "...",
-  "hashtags": ["...", "..."]
+  "highlights": ["...", "..."],
+  "hashtags": ["...", "..."],
+  "youtube_title": "...",
+  "youtube_description": "..."
 }}"""
 
         return [
@@ -169,6 +194,9 @@ Retorne SOMENTE este JSON:
             curiosity_text=data.get("hook", data.get("curiosity_text", "")).strip(),
             story_text=data.get("story", "").strip(),
             comment_text=data.get("comment", data.get("comment_text", "")).strip(),
+            highlights=data.get("highlights", []),
             hashtags=data.get("hashtags", []),
             language=language,
+            youtube_title=data.get("youtube_title", "").strip(),
+            youtube_description=data.get("youtube_description", "").strip(),
         )
