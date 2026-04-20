@@ -113,6 +113,9 @@ image_ingestion:
   # Tipo de listing: hot | top | rising
   listing: "hot"
 
+  # Quantos posts exibir no menu interativo para escolha
+  top_n_posts: 5
+
   # Filtro de tempo para listing=top: hour | day | week | month | year | all
   time_filter: "day"
 

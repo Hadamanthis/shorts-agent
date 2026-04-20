@@ -227,7 +227,8 @@ def run_pipeline(args: argparse.Namespace) -> None:
             if args.image_url:
                 ctx.source = module.run_manual(ctx, args.image_url)
             else:
-                ctx.source = module.run_reddit(ctx)
+                # Modo interativo: exibe top-n e deixa o usuário escolher
+                ctx.source = module.run_reddit_interactive(ctx)
             if args.only == "ingestion":
                 logger.info(f"[Pipeline] Imagem: {ctx.source.image_path}")
                 return
