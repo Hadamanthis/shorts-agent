@@ -26,7 +26,7 @@ _LANGUAGE_INSTRUCTIONS = {
 
 _TONE_INSTRUCTIONS = {
     "surpreso":    "O comentário deve soar surpreso e impressionado.",
-    "humoristico": "O comentário deve ser bem-humorado e leve.",
+    "humoristico": "O comentário deve ser bem-humorado e fazendo boas referências.",
     "reflexivo":   "O comentário deve soar reflexivo e pensativo.",
     "emocional":   "O comentário deve soar emocionado e tocado.",
 }
