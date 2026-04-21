@@ -24,11 +24,6 @@ def _url_id(url: str) -> str:
     return hashlib.md5(url.encode()).hexdigest()[:12]
 
 
-def _ansi_link(url: str, text: str) -> str:
-    """Retorna URL clicável via escape ANSI OSC 8 (suportado por iTerm2, Kitty, WezTerm, GNOME Terminal etc.)"""
-    return f"\033]8;;{url}\033\\{text}\033]8;;\033\\"
-
-
 def save_image_source(src: ImageSource) -> Path:
     CACHE_DIR.mkdir(parents=True, exist_ok=True)
     path = CACHE_DIR / f"image_{_url_id(src.source_url)}.json"
@@ -63,16 +58,17 @@ def load_image_source(url: str) -> Optional[ImageSource]:
 class ImageIngestionModule:
 
     def run_reddit(self, ctx: PipelineContext) -> ImageSource:
-        """Modo automático — pega o top-1 sem interação. Mantido para uso programático."""
+        """Modo automático — pega o top-1 sem interação."""
         cfg          = ctx.config.get("image_ingestion", {})
         subreddit    = cfg.get("subreddit", "interestingasfuck")
         listing      = cfg.get("listing", "hot")
         time_filter  = cfg.get("time_filter", "day")
         max_comments = cfg.get("max_comments", 5)
         min_score    = cfg.get("min_score", 1000)
+        fetch_limit  = cfg.get("fetch_limit", 50)
 
         logger.info(f"[ImageIngestion] Reddit — r/{subreddit} [{listing}]")
-        posts      = self._find_reddit_posts(subreddit, listing, time_filter, min_score, limit=1)
+        posts      = self._find_reddit_posts(subreddit, listing, time_filter, min_score, limit=1, fetch_limit=fetch_limit)
         post       = posts[0]
         image_path = self._download_image(post["url"], post["id"])
         comments   = self._fetch_reddit_comments(post["permalink"], max_comments)
@@ -89,19 +85,18 @@ class ImageIngestionModule:
         return src
 
     def run_reddit_interactive(self, ctx: PipelineContext) -> ImageSource:
-        """Modo interativo — exibe top-n posts e deixa o usuário escolher via TUI."""
+        """Modo interativo — exibe posts com paginação e deixa o usuário escolher via TUI."""
         cfg          = ctx.config.get("image_ingestion", {})
         subreddit    = cfg.get("subreddit", "interestingasfuck")
         listing      = cfg.get("listing", "hot")
         time_filter  = cfg.get("time_filter", "day")
         max_comments = cfg.get("max_comments", 5)
         min_score    = cfg.get("min_score", 1000)
-        top_n        = cfg.get("top_n_posts", 5)
+        fetch_limit  = cfg.get("fetch_limit", 50)
 
-        logger.info(f"[ImageIngestion] Reddit interativo — r/{subreddit} [{listing}] top {top_n}")
-        posts = self._find_reddit_posts(subreddit, listing, time_filter, min_score, limit=top_n)
-
-        post = self._prompt_post_selection(posts, subreddit)
+        logger.info(f"[ImageIngestion] Reddit interativo — r/{subreddit} [{listing}]")
+        posts = self._find_reddit_posts(subreddit, listing, time_filter, min_score, limit=fetch_limit, fetch_limit=fetch_limit)
+        post  = self._prompt_post_selection(posts, subreddit)
 
         logger.info(f"[ImageIngestion] Post escolhido: {post['title'][:60]}")
         image_path = self._download_image(post["url"], post["id"])
@@ -135,80 +130,101 @@ class ImageIngestionModule:
     # ── TUI ──────────────────────────────────────────────────────────────────
 
     def _prompt_post_selection(self, posts: list[dict], subreddit: str) -> dict:
-        """
-        Exibe menu interativo com setas usando questionary.
-        Fallback para input numérico se questionary não estiver instalado.
-        """
         try:
             import questionary
             from questionary import Style
 
             custom_style = Style([
-                ("qmark",        "fg:#00b4d8 bold"),
-                ("question",     "fg:#ffffff bold"),
-                ("highlighted",  "fg:#00b4d8 bold"),
-                ("selected",     "fg:#90e0ef"),
-                ("pointer",      "fg:#00b4d8 bold"),
-                ("answer",       "fg:#90e0ef bold"),
+                ("qmark",       "fg:#00b4d8 bold"),
+                ("question",    "fg:#ffffff bold"),
+                ("highlighted", "fg:#00b4d8 bold"),
+                ("selected",    "fg:#90e0ef"),
+                ("pointer",     "fg:#00b4d8 bold"),
+                ("answer",      "fg:#90e0ef bold"),
             ])
 
-            # Monta as choices — o valor é o índice para recuperar o post depois
-            choices = []
-            for i, p in enumerate(posts):
-                score    = p.get("score", 0)
-                n_comms  = p.get("num_comments", 0)
-                title    = p.get("title", "")
-                img_url  = p.get("url", "")
+            PAGE_SIZE   = 5
+            page        = 0
+            total_pages = max(1, (len(posts) + PAGE_SIZE - 1) // PAGE_SIZE)
 
-                # Título truncado para caber no terminal
-                title_short = title if len(title) <= 72 else title[:69] + "…"
+            while True:
+                start      = page * PAGE_SIZE
+                page_posts = posts[start: start + PAGE_SIZE]
 
-                # URL clicável (OSC 8) — aparece como texto curto mas é clicável em terminais compatíveis
-                clickable = _ansi_link(img_url, "🔗 ver imagem")
+                choices = []
+                for i, p in enumerate(page_posts):
+                    global_i    = start + i
+                    title       = p.get("title", "")
+                    title_short = title if len(title) <= 72 else title[:69] + "…"
+                    score       = p.get("score", 0)
+                    n_comms     = p.get("num_comments", 0)
+                    label = (
+                        f"[{global_i+1}] {title_short}\n"
+                        f"     ⬆ {score:,}  💬 {n_comms:,}"
+                    )
+                    choices.append(questionary.Choice(title=label, value=global_i))
 
-                label = (
-                    f"[{i+1}] {title_short}\n"
-                    f"     ⬆ {score:,}  💬 {n_comms:,}  {clickable}"
-                )
-                choices.append(questionary.Choice(title=label, value=i))
+                if page > 0:
+                    choices.append(questionary.Choice(title="◀ Página anterior", value="prev"))
+                if page < total_pages - 1:
+                    choices.append(questionary.Choice(title=f"▶ Próxima página ({page+2}/{total_pages})", value="next"))
+                choices.append(questionary.Choice(title="✖ Cancelar", value="cancel"))
 
-            print(f"\n📋 Posts disponíveis em r/{subreddit}:\n")
-            selected_index = questionary.select(
-                "Escolha um post com ↑↓ e Enter:",
-                choices=choices,
-                style=custom_style,
-                use_shortcuts=False,
-            ).ask()
+                print(f"\n📋 r/{subreddit} — {len(posts)} posts disponíveis, página {page+1}/{total_pages}:\n")
+                selected = questionary.select(
+                    "Escolha um post com ↑↓ e Enter:",
+                    choices=choices,
+                    style=custom_style,
+                    use_shortcuts=False,
+                ).ask()
 
-            if selected_index is None:
-                # Usuário cancelou com Ctrl+C
-                print("\nOperação cancelada.")
-                sys.exit(0)
-
-            return posts[selected_index]
+                if selected is None or selected == "cancel":
+                    print("\nOperação cancelada.")
+                    sys.exit(0)
+                elif selected == "prev":
+                    page -= 1
+                elif selected == "next":
+                    page += 1
+                else:
+                    return posts[selected]
 
         except ImportError:
             return self._prompt_post_selection_fallback(posts, subreddit)
 
     def _prompt_post_selection_fallback(self, posts: list[dict], subreddit: str) -> dict:
-        """Fallback numérico caso questionary não esteja disponível."""
-        print(f"\n📋 Posts disponíveis em r/{subreddit}:\n")
-        for i, p in enumerate(posts):
-            score   = p.get("score", 0)
-            n_comms = p.get("num_comments", 0)
-            title   = p.get("title", "")
-            img_url = p.get("url", "")
-            clickable = _ansi_link(img_url, img_url)
-            print(f"  [{i+1}] {title}")
-            print(f"       ⬆ {score:,}  💬 {n_comms:,}  {clickable}\n")
+        """Fallback numérico com paginação caso questionary não esteja instalado."""
+        PAGE_SIZE   = 5
+        page        = 0
+        total_pages = max(1, (len(posts) + PAGE_SIZE - 1) // PAGE_SIZE)
 
         while True:
+            start      = page * PAGE_SIZE
+            page_posts = posts[start: start + PAGE_SIZE]
+
+            print(f"\n📋 r/{subreddit} — página {page+1}/{total_pages}:\n")
+            for i, p in enumerate(page_posts):
+                global_i = start + i
+                print(f"  [{global_i+1}] {p.get('title', '')}")
+                print(f"       ⬆ {p.get('score', 0):,}  💬 {p.get('num_comments', 0):,}\n")
+
+            nav = []
+            if page > 0:
+                nav.append("'p' anterior")
+            if page < total_pages - 1:
+                nav.append("'n' próxima")
+            nav.append(f"1-{len(posts)} para escolher")
+
             try:
-                raw = input(f"Escolha um número [1-{len(posts)}]: ").strip()
-                idx = int(raw) - 1
-                if 0 <= idx < len(posts):
-                    return posts[idx]
-                print(f"  Digite um número entre 1 e {len(posts)}.")
+                raw = input(f"  [{' | '.join(nav)}]: ").strip().lower()
+                if raw == "n" and page < total_pages - 1:
+                    page += 1
+                elif raw == "p" and page > 0:
+                    page -= 1
+                else:
+                    idx = int(raw) - 1
+                    if 0 <= idx < len(posts):
+                        return posts[idx]
+                    print(f"  Digite um número entre 1 e {len(posts)}.")
             except (ValueError, KeyboardInterrupt):
                 print("\nOperação cancelada.")
                 sys.exit(0)
@@ -227,16 +243,11 @@ class ImageIngestionModule:
         time_filter: str,
         min_score: int,
         limit: int,
+        fetch_limit: int = 50,
     ) -> list[dict]:
-        """
-        Retorna até `limit` posts com imagem válida do subreddit.
-        Faz paginação automática se necessário para encontrar posts suficientes.
-        """
         IMAGE_EXTENSIONS = (".jpg", ".jpeg", ".png", ".webp")
         IMGUR_RE = re.compile(r"https?://(?:i\.)?imgur\.com/(\w+)(?:\.\w+)?$")
 
-        # Busca mais itens do que o necessário para compensar posts sem imagem
-        fetch_limit = min(limit * 6, 100)
         url = f"{REDDIT_BASE}/r/{subreddit}/{listing}.json?limit={fetch_limit}"
         if listing == "top":
             url += f"&t={time_filter}"
@@ -245,7 +256,7 @@ class ImageIngestionModule:
         found: list[dict] = []
 
         for item in raw_posts:
-            if len(found) >= limit:
+            if limit == 1 and len(found) >= 1:
                 break
 
             p = item["data"]

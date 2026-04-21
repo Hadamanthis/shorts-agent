@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Optional, Union
 
 
+
 @dataclass
 class VideoSource:
     url: str
@@ -46,6 +47,8 @@ class ImageSource:
             "origin": self.origin,
         }
 
+# Tipo único de source — o pipeline sabe qual tipo espera
+AnySource = Union[VideoSource, ImageSource]
 
 @dataclass
 class GeneratedContent:
@@ -81,8 +84,7 @@ class RenderedShort:
 class PipelineContext:
     profile_name: str
     config: dict
-    source: Optional[Union[VideoSource, ImageSource]] = None
-    image_source: Optional[ImageSource] = None         # pipeline de imagem
+    source: Optional[AnySource] = None
     content: Optional[GeneratedContent] = None
     assets: Optional[PreparedAssets] = None
     rendered: Optional[RenderedShort] = None

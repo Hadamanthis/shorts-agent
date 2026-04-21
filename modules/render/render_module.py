@@ -88,60 +88,42 @@ class RenderModule:
 
     def _sync_public(self, assets: PreparedAssets, template: str, duration_seconds: float, fps: int) -> None:
         """
-        Prepara video-renderer/public/ com todos os assets que o Remotion precisa.
-
-        bg_looped.mp4 — gerado via FFmpeg com loop exato da duração do clip.
-          O OffthreadVideo do Remotion não suporta loop nativo, então entregamos
-          um arquivo já com a duração certa, sem precisar de <Loop> no TSX.
-
-        avatar — copiado uma vez (identidade fixa do canal).
-        clip/imagem — sempre sobrescreve (muda a cada vídeo).
+        Copia os assets para video-renderer/public/ sem nenhum processamento FFmpeg.
+        Use um bg.mp4 longo o suficiente (3-5 min) para cobrir qualquer short.
         """
-        # bg_looped.mp4 — sempre regera para bater com a duração atual do clip
-        bg_src = assets.background_video_path  # agora aponta para bg_3min.mp4
-        bg_looped = PUBLIC_DIR / "bg_looped.mp4"
-        if not bg_looped.exists():  # só copia se não existir
-            shutil.copy2(bg_src, bg_looped)
-        logger.info(f"[Render] Gerando bg_looped.mp4 com {duration_seconds:.1f}s via FFmpeg...")
-        ffmpeg_loop_cmd = [
-            "ffmpeg", "-y",
-            "-stream_loop", "-1",
-            "-i", str(bg_src.resolve()),
-            "-t", str(duration_seconds + 2),   # +2s de margem
-            "-vf", f"fps={fps}",              # converte framerate
-            "-c:v", "libx264",
-            "-an",
-            "-preset", "fast",
-            "-pix_fmt", "yuv420p",
-            "-video_track_timescale", str(fps), # timebase 1/fps — elimina o bug do Remotion
-            str(bg_looped),
-        ]
-        result = subprocess.run(ffmpeg_loop_cmd, capture_output=True, text=True, timeout=120)
-        if result.returncode != 0:
-            raise RuntimeError(f"FFmpeg falhou ao gerar bg_looped.mp4:\n{result.stderr}")
+        # bg — copia direto, apenas se ainda não estiver lá
+        bg_dst = PUBLIC_DIR / "bg_looped.mp4"
+        if not bg_dst.exists():
+            logger.info(f"[Render] Copiando fundo para public/: {assets.background_video_path.name}")
+            shutil.copy2(assets.background_video_path, bg_dst)
+        else:
+            logger.info("[Render] Fundo já em public/, pulando cópia.")
 
-        # avatar — só copia se não existir ainda
-        avatar_src = assets.avatar_path
-        avatar_dst = PUBLIC_DIR / avatar_src.name
+        # avatar — copia uma vez
+        avatar_dst = PUBLIC_DIR / assets.avatar_path.name
         if not avatar_dst.exists():
-            logger.info(f"[Render] Copiando avatar para public/: {avatar_src.name}")
-            shutil.copy2(avatar_src, avatar_dst)
+            logger.info(f"[Render] Copiando avatar para public/: {assets.avatar_path.name}")
+            shutil.copy2(assets.avatar_path, avatar_dst)
 
-        # clip / imagem — sempre copia (muda a cada vídeo)
+        # música — copia uma vez
+        if assets.music_path and assets.music_path.exists():
+            music_dst = PUBLIC_DIR / "bg_music.mp3"
+            if not music_dst.exists():
+                logger.info(f"[Render] Copiando música para public/: {assets.music_path.name}")
+                shutil.copy2(assets.music_path, music_dst)
+
+        # clip / imagem — sempre sobrescreve (muda a cada vídeo)
         if template == "ComentarioVideo":
             clip_dst = PUBLIC_DIR / assets.clip_path.name
             logger.info(f"[Render] Copiando clip para public/: {assets.clip_path.name}")
             shutil.copy2(assets.clip_path, clip_dst)
 
         elif template == "ComentarioImagem":
-            if assets.image_path and assets.image_path.exists():
-                img_dst = PUBLIC_DIR / assets.image_path.name
-                shutil.copy2(assets.image_path, img_dst)
-                logger.info(f"[Render] Copiando imagem para public/: {assets.image_path.name}")
-            else:
-                raise FileNotFoundError(
-                    "ComentarioImagem requer image_path nos assets, mas não foi encontrado."
-                )
+            if not (assets.image_path and assets.image_path.exists()):
+                raise FileNotFoundError("ComentarioImagem requer image_path nos assets.")
+            img_dst = PUBLIC_DIR / assets.image_path.name
+            shutil.copy2(assets.image_path, img_dst)
+            logger.info(f"[Render] Copiando imagem para public/: {assets.image_path.name}")
 
     def _build_props(
         self,
@@ -160,6 +142,10 @@ class RenderModule:
 
         if template == "ComentarioVideo":
             base["video"] = assets.clip_path.name
+            base["story"] = content.story_text
+            base["highlights"] = content.highlights
+            if assets.music_path:
+                base["music"] = "bg_music.mp3"
         elif template == "ComentarioImagem":
             if not assets.image_path:
                 raise ValueError("ComentarioImagem requer image_path nos assets.")
@@ -172,11 +158,17 @@ class RenderModule:
         return base
 
     def _get_duration(self, video_path: Path) -> float:
-        """Usa ffprobe para obter a duração real do clipe em segundos."""
+        """
+        Obtém a duração real do clipe contando os frames efetivamente presentes
+        (-count_packets). Isso evita que metadata inflado pelo FFmpeg faça o
+        Remotion pedir frames além do fim do arquivo.
+        """
         cmd = [
             "ffprobe", "-v", "quiet",
             "-print_format", "json",
-            "-show_streams",
+            "-select_streams", "v:0",
+            "-count_packets",
+            "-show_entries", "stream=nb_read_packets,r_frame_rate,duration",
             str(video_path),
         ]
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
@@ -185,11 +177,30 @@ class RenderModule:
             return 30.0
 
         data = json.loads(result.stdout)
-        for stream in data.get("streams", []):
-            if stream.get("codec_type") == "video":
-                return float(stream.get("duration", 30.0))
+        streams = data.get("streams", [])
+        if not streams:
+            return 30.0
 
-        return 30.0
+        stream = streams[0]
+
+        # Tenta calcular pelo número real de packets (frames)
+        nb_packets = stream.get("nb_read_packets")
+        r_frame_rate = stream.get("r_frame_rate", "30/1")
+        if nb_packets:
+            try:
+                num, den = map(int, r_frame_rate.split("/"))
+                fps = num / den if den else 30.0
+                # Margem de segurança: subtrai 2 frames para evitar off-by-one
+                duration = max(0.1, int(nb_packets) / fps - (2 / fps))
+                logger.info(f"[Render] Duração real: {int(nb_packets)} frames / {fps:.2f}fps = {duration:.2f}s")
+                return duration
+            except (ValueError, ZeroDivisionError):
+                pass
+
+        # Fallback: campo duration do stream
+        duration = float(stream.get("duration", 30.0))
+        logger.info(f"[Render] Duração via metadata: {duration:.2f}s")
+        return duration
 
     def _run_remotion(
         self,

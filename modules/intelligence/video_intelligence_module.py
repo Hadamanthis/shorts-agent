@@ -1,22 +1,23 @@
 """
-intelligence/image_intelligence_module.py — Gera hook, story e comentário a partir de uma imagem.
+intelligence/video_intelligence_module.py — Gera hook, story e comentário a partir de um vídeo do Reddit.
+
+Sem vision (vídeos não podem ser enviados como base64 ao Groq),
+usa título + comentários do Reddit como contexto.
 """
-import base64
 import json
 import logging
 import os
 import re
-from pathlib import Path
 
 from groq import Groq
 from dotenv import load_dotenv
 
-from modules.models import GeneratedContent, ImageSource, PipelineContext
+from modules.models import GeneratedContent, VideoSource, PipelineContext
 
 load_dotenv()
 logger = logging.getLogger(__name__)
 
-VISION_MODEL = "meta-llama/llama-4-scout-17b-16e-instruct"
+TEXT_MODEL = "llama-3.3-70b-versatile"
 
 _LANGUAGE_INSTRUCTIONS = {
     "pt-BR": "Responda SEMPRE em português brasileiro informal e natural.",
@@ -32,7 +33,7 @@ _TONE_INSTRUCTIONS = {
 }
 
 
-class ImageIntelligenceModule:
+class VideoIntelligenceModule:
 
     def __init__(self):
         api_key = os.environ.get("GROQ_API_KEY")
@@ -40,47 +41,41 @@ class ImageIntelligenceModule:
             raise EnvironmentError("GROQ_API_KEY não encontrada.")
         self._client = Groq(api_key=api_key)
 
-    def run(self, ctx: PipelineContext, image_source: ImageSource) -> GeneratedContent:
+    def run(self, ctx: PipelineContext, source: VideoSource) -> GeneratedContent:
         profile     = ctx.config["profiles"][ctx.profile_name]
         content_cfg = ctx.config["content"]
         groq_cfg    = ctx.config["groq"]
         language    = profile["language"]
         niche       = profile["niche"]
 
-        logger.info(f"[ImageIntelligence] Analisando: {image_source.image_path.name}")
+        logger.info(f"[VideoIntelligence] Gerando conteúdo para: {source.title[:60]}")
 
-        image_b64  = base64.standard_b64encode(image_source.image_path.read_bytes()).decode()
-        media_type = {
-            ".jpg": "image/jpeg", ".jpeg": "image/jpeg",
-            ".png": "image/png",  ".webp": "image/webp",
-            ".gif": "image/gif",
-        }.get(image_source.image_path.suffix.lower(), "image/jpeg")
-
-        messages = self._build_messages(image_b64, media_type, image_source, content_cfg, language, niche)
+        messages = self._build_messages(source, content_cfg, language, niche)
         response_text = self._call_groq(messages, groq_cfg)
         content = self._parse_response(response_text, language)
 
-        logger.info(f"[ImageIntelligence] Hook: {content.curiosity_text[:60]}...")
-        logger.info(f"[ImageIntelligence] Comentário: {content.comment_text[:60]}...")
+        logger.info(f"[VideoIntelligence] Hook: {content.curiosity_text[:60]}...")
+        logger.info(f"[VideoIntelligence] Comentário: {content.comment_text[:60]}...")
         return content
 
-    def _build_messages(self, image_b64, media_type, image_source, content_cfg, language, niche):
+    def _build_messages(self, source: VideoSource, content_cfg: dict, language: str, niche: str) -> list[dict]:
         lang_instruction = _LANGUAGE_INSTRUCTIONS.get(language, _LANGUAGE_INSTRUCTIONS["pt-BR"])
         tone_instruction = _TONE_INSTRUCTIONS.get(content_cfg["comment_tone"], _TONE_INSTRUCTIONS["surpreso"])
 
-        context_block = ""
-        if image_source.title:
-            context_block += f'Título do post: "{image_source.title}"\n'
-        if image_source.context_comments:
+        context_block = f'Título do post: "{source.title}"\n'
+        if source.channel_name:
+            context_block += f'Subreddit: {source.channel_name}\n'
+        if source.comments:
             context_block += "Comentários reais:\n"
-            context_block += "\n".join(f"  - {c}" for c in image_source.context_comments[:5])
+            context_block += "\n".join(f"  - {c}" for c in source.comments[:5])
             context_block += "\n"
 
         system_prompt = f"""Você é um roteirista de YouTube Shorts virais no nicho de {niche}.
 {lang_instruction}
 Sua única saída é um objeto JSON válido, sem texto antes ou depois, sem markdown, não use triplas aspas.
 
-Você gera conteúdo para um short de 45–60 segundos. Regras por campo:
+Gere conteúdo para um short de 45–60 segundos com base no título e comentários do post do Reddit abaixo.
+Regras por campo:
 
 HOOK — Manchete de jornal sensacionalista mas factual. Máximo 10 palavras.
   - Tom de manchete: direto, impactante, pode usar contraste ou ironia.
@@ -92,7 +87,7 @@ HOOK — Manchete de jornal sensacionalista mas factual. Máximo 10 palavras.
   - NUNCA use: "Incrível", "Chocante", "Você não vai acreditar".
   Máximo {content_cfg['curiosity_max_chars']} caracteres.
 
-STORY — A história por trás da imagem. Informativo, denso, envolvente.
+STORY — A história por trás do vídeo. Informativo, denso, envolvente.
 - Use o título e comentários do Reddit como base — não invente fatos, pesquise na internet para ter mais contexto.
 - Escreva como um parágrafo de enciclopédia reescrito por alguém que adora contar histórias.
 - Inclua: contexto histórico, como funcionava na prática, detalhes específicos e curiosos,
@@ -136,7 +131,7 @@ NUNCA termine com reticências (...).
 {tone_instruction}
 Máximo {content_cfg['comment_max_chars']} caracteres.
 
-HASHTAGS — 3 a 5 hashtags relevantes, com o caractere #.
+HASHTAGS — 3 a 5 hashtags relevantes.
 
 YOUTUBE_TITLE — Título do Short para o YouTube. Máximo 95 caracteres.
 - Deve chamar atenção, usar o hook como base mas pode ser ligeiramente diferente.
@@ -149,8 +144,6 @@ YOUTUBE_DESCRIPTION — Descrição do Short, na ordem. Deve ser um parágrafo c
 - Sem emojis."""
 
         user_text = f"""{context_block}
-Analise a imagem e gere o conteúdo seguindo exatamente as regras do sistema.
-
 Retorne SOMENTE este JSON:
 {{
   "hook": "...",
@@ -164,18 +157,12 @@ Retorne SOMENTE este JSON:
 
         return [
             {"role": "system", "content": system_prompt},
-            {
-                "role": "user",
-                "content": [
-                    {"type": "image_url", "image_url": {"url": f"data:{media_type};base64,{image_b64}"}},
-                    {"type": "text", "text": user_text},
-                ],
-            },
+            {"role": "user", "content": user_text},
         ]
 
-    def _call_groq(self, messages, groq_cfg) -> str:
+    def _call_groq(self, messages: list[dict], groq_cfg: dict) -> str:
         response = self._client.chat.completions.create(
-            model=VISION_MODEL,
+            model=TEXT_MODEL,
             temperature=groq_cfg["temperature"],
             max_tokens=groq_cfg["max_tokens"],
             messages=messages,
@@ -190,9 +177,9 @@ Retorne SOMENTE este JSON:
             raise ValueError(f"LLM não retornou JSON válido: {e}\nResposta:\n{text}")
 
         return GeneratedContent(
-            curiosity_text=data.get("hook", data.get("curiosity_text", "")).strip(),
+            curiosity_text=data.get("hook", "").strip(),
             story_text=data.get("story", "").strip(),
-            comment_text=data.get("comment", data.get("comment_text", "")).strip(),
+            comment_text=data.get("comment", "").strip(),
             highlights=data.get("highlights", []),
             hashtags=data.get("hashtags", []),
             language=language,

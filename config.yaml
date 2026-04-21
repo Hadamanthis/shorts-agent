@@ -18,6 +18,14 @@ profiles:
     background_video: "assets/backgrounds/bg_default.mp4"
     music_path: "assets/music/bg_music.mp3"
 
+  Tenebrosia:
+    language: "pt-BR"
+    niche: "mistérios e terror"
+    account_name: "Tenebrosia"
+    avatar_path: "assets/profiles/synthvator.png"
+    background_video: "assets/backgrounds/bg_default.mp4"
+    music_path: "assets/music/bg_music.mp3"
+
   FilmFactsEN:
     language: "en-US"
     niche: "movies and pop culture"
@@ -61,7 +69,7 @@ content:
   comment_max_chars: 200
 
   # Tom do comentário gerado: "surpreso", "humoristico", "reflexivo", "emocional"
-  comment_tone: "humoristico"
+  comment_tone: "humoristico e inteligente"
 
 # -----------------------------------------------------------------------------
 # PARÂMETROS DO LAYOUT (card 9:16)
@@ -127,3 +135,40 @@ image_ingestion:
 
   # Duração do short gerado (em segundos) — não há clip, então é fixa
   short_duration: 30
+
+  # Quantos resultados retornados pelo reddit
+  fetch_limit: 50
+
+# -----------------------------------------------------------------------------
+# PARÂMETROS DO PIPELINE DE VÍDEO REDDIT (ComentarioVideo)
+# -----------------------------------------------------------------------------
+video_ingestion:
+  # Subreddit a monitorar
+  subreddit: "nextfuckinglevel"
+ 
+  # Tipo de listing: hot | top | rising
+  listing: "hot"
+ 
+  # Filtro de tempo para listing=top
+  time_filter: "day"
+ 
+  # Score mínimo do post
+  min_score: 1000
+ 
+  # Máximo de comentários a buscar para contexto do LLM
+  max_comments: 10
+ 
+  # Quantos posts mostrar no modo interativo
+  top_n_posts: 5
+ 
+  # Duração máxima do trecho recortado (segundos)
+  max_clip_duration: 30
+ 
+  # Ponto de início do trecho
+  clip_start_offset: 0
+
+  # máximo 3 minutos (em segundos)
+  max_post_duration: 180
+
+  # Quantos resultados retornados pelo reddit
+  fetch_limit: 50
