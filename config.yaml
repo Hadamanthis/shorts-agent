@@ -1,13 +1,9 @@
 # =============================================================================
 # SHORTS AGENT — Configuração Principal
 # =============================================================================
-# Edite este arquivo para controlar tudo que o agente produz.
-# Não é necessário mexer em código Python para mudar comportamento.
 
 # -----------------------------------------------------------------------------
 # PERFIS DE CANAL
-# Cada perfil representa uma identidade de canal diferente.
-# Use --profile <nome> na CLI para selecionar.
 # -----------------------------------------------------------------------------
 profiles:
   Synthvator:
@@ -35,140 +31,92 @@ profiles:
     music_path: "assets/music/bg_music.mp3"
 
 # -----------------------------------------------------------------------------
-# PARÂMETROS DO VÍDEO DE ENTRADA
-# Controla o que será baixado e como o trecho será selecionado.
-# -----------------------------------------------------------------------------
-video:
-  # Duração máxima do trecho recortado do vídeo original (em segundos)
-  max_clip_duration: 30
-
-  # Onde no vídeo original começar a buscar o trecho (em segundos)
-  # Use 0 para começar do início
-  clip_start_offset: 0
-
-  # Número máximo de comentários reais a coletar do YouTube
-  # (usados como insumo para o LLM gerar conteúdo)
-  max_comments_to_fetch: 20
-
-  # Número de comentários a exibir como insumo no prompt do LLM
-  # (os mais curtidos dentre os coletados)
-  top_comments_for_context: 10
-
-# -----------------------------------------------------------------------------
-# PARÂMETROS DO CONTEÚDO GERADO PELO LLM
-# Controla o que o agente vai criar textualmente.
+# CONTEÚDO GERADO PELO LLM
 # -----------------------------------------------------------------------------
 content:
-  # Quantos assuntos/fatos o LLM deve abordar no texto de curiosidade (zona 1 do card)
-  num_facts: 1
-
-  # Tamanho máximo do texto de curiosidade (zona 1) em caracteres
+  # Tamanho máximo do hook (zona 1) em caracteres
   curiosity_max_chars: 120
 
-  # Tamanho máximo do comentário fictício (zona 3) em caracteres
+  # Tamanho máximo do comentário (zona 3) em caracteres
   comment_max_chars: 200
 
-  # Tom do comentário gerado: "surpreso", "humoristico", "reflexivo", "emocional"
-  comment_tone: "humoristico e inteligente"
+  # Tom do comentário: "surpreso" | "humoristico" | "reflexivo" | "emocional"
+  comment_tone: "humoristico"
 
 # -----------------------------------------------------------------------------
-# PARÂMETROS DO LAYOUT (card 9:16)
+# LAYOUT DO SHORT (card 9:16)
 # -----------------------------------------------------------------------------
 layout:
-  # Resolução final do short (deve bater com Root.tsx)
   width: 1080
   height: 1920
-
-  # FPS do vídeo gerado
   fps: 30
-
-  # Nota: cores, bordas e padding são controlados nos templates Remotion
-  # em video-renderer/src/templates/
 
 # -----------------------------------------------------------------------------
 # GROQ API
 # -----------------------------------------------------------------------------
 groq:
-  model: "llama-3.3-70b-versatile"
   temperature: 0.8
   max_tokens: 512
 
 # -----------------------------------------------------------------------------
 # PIPELINE — Etapas ativas
-# Desative etapas para pular durante desenvolvimento/testes.
 # -----------------------------------------------------------------------------
 pipeline:
-  run_ingestion: true
+  run_ingestion:   true
   run_intelligence: true
-  run_asset_prep: true
-  run_render: true
-  run_output: true
-
-  # Futuramente: watermark_removal, auto_upload, etc.
-  watermark_removal: false
-  auto_upload: false
+  run_asset_prep:  true
+  run_render:      true
+  run_output:      true
 
 # -----------------------------------------------------------------------------
-# PARÂMETROS DO PIPELINE DE IMAGEM (ComentarioImagem)
+# COMENTARIO-REDDIT
+# Usado pelo template comentario-reddit (imagem ou vídeo do Reddit).
+# O subreddit padrão aqui é sobrescrito por --subreddit na CLI.
 # -----------------------------------------------------------------------------
-image_ingestion:
-  # Fonte padrão: "reddit" ou "manual"
-  default_source: "reddit"
-
-  # Subreddit a monitorar (usado no modo reddit)
+comentario-reddit:
+  # Subreddit padrão (sobrescrito por --subreddit na CLI)
   subreddit: "interestingasfuck"
 
   # Tipo de listing: hot | top | rising
   listing: "hot"
 
-  # Quantos posts exibir no menu interativo para escolha
-  top_n_posts: 5
-
   # Filtro de tempo para listing=top: hour | day | week | month | year | all
   time_filter: "day"
 
-  # Score mínimo do post para ser considerado
-  min_score: 1000
+  # Score mínimo do post para aparecer na listagem
+  min_score: 500
 
-  # Máximo de comentários do Reddit a buscar para contexto do LLM
-  max_comments: 10
-
-  # Duração do short gerado (em segundos) — não há clip, então é fixa
-  short_duration: 30
-
-  # Quantos resultados retornados pelo reddit
+  # Quantos posts buscar do Reddit (afeta variedade na paginação)
   fetch_limit: 50
 
-# -----------------------------------------------------------------------------
-# PARÂMETROS DO PIPELINE DE VÍDEO REDDIT (ComentarioVideo)
-# -----------------------------------------------------------------------------
-video_ingestion:
-  # Subreddit a monitorar
-  subreddit: "nextfuckinglevel"
- 
-  # Tipo de listing: hot | top | rising
-  listing: "hot"
- 
-  # Filtro de tempo para listing=top
-  time_filter: "day"
- 
-  # Score mínimo do post
-  min_score: 1000
- 
-  # Máximo de comentários a buscar para contexto do LLM
+  # Máximo de comentários do Reddit para contexto do LLM
   max_comments: 10
- 
-  # Quantos posts mostrar no modo interativo
-  top_n_posts: 5
- 
-  # Duração máxima do trecho recortado (segundos)
-  max_clip_duration: 30
- 
-  # Ponto de início do trecho
-  clip_start_offset: 0
 
-  # máximo 3 minutos (em segundos)
+  # Duração máxima de vídeos aceitos na listagem (segundos) — 180 = 3 min
   max_post_duration: 180
 
-  # Quantos resultados retornados pelo reddit
-  fetch_limit: 50
+  # Duração máxima do trecho recortado do vídeo (segundos)
+  max_clip_duration: 30
+
+  # Ponto de início do recorte no vídeo original (segundos)
+  clip_start_offset: 0
+
+  # Duração fixa do short gerado para posts de imagem (segundos)
+  short_duration: 30
+
+# -----------------------------------------------------------------------------
+# COMENTARIO-YOUTUBE
+# Usado pelo template comentario-youtube.
+# -----------------------------------------------------------------------------
+comentario-youtube:
+  # Número máximo de comentários a coletar do YouTube
+  max_comments_to_fetch: 20
+
+  # Comentários mais curtidos a usar como contexto do LLM
+  top_comments_for_context: 10
+
+  # Duração máxima do trecho recortado (segundos)
+  max_clip_duration: 30
+
+  # Ponto de início do recorte (segundos)
+  clip_start_offset: 0

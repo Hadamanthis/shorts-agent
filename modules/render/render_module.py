@@ -52,7 +52,7 @@ class RenderModule:
         if template == "ComentarioVideo":
             duration_seconds = self._get_duration(assets.clip_path)
         else:
-            duration_seconds = float(ctx.config["image_ingestion"].get("short_duration", 15))
+            duration_seconds = float(ctx.config["comentario-reddit"].get("short_duration", 30))
         duration_frames = int(duration_seconds * fps)
 
         # 2. Prepara public/ com bg_looped.mp4 na duração certa e FPS correto
