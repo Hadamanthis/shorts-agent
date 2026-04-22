@@ -23,7 +23,7 @@ from pathlib import Path
 from typing import Optional
 
 import yaml
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.responses import Response
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -100,11 +100,17 @@ class DYKGenerateRequest(BaseModel):
 class DYKFactInput(BaseModel):
     text: str
     image_url: str
+    duration_seconds: Optional[float] = None  # override por card; None = usa config padrão
 
 class DYKRenderRequest(BaseModel):
     facts: list[DYKFactInput]
     profile: str = "Synthvator"
-    music_name: Optional[str] = None  # override da música do perfil
+    music_name: Optional[str] = None
+    topic: Optional[str] = None  # usado para gerar metadata SEO após render
+
+class ImageSearchRequest(BaseModel):
+    query: str
+    per_source: int = 3
 
 
 # ── Config endpoints ──────────────────────────────────────────────────────────
@@ -338,9 +344,37 @@ def cleanup_public():
     return {"deleted": deleted, "count": len(deleted)}
 
 
+@app.post("/dyk/upload-video")
+async def upload_dyk_video(file: UploadFile = File(...)):
+    """Recebe um vídeo local e salva em assets/videos/ para uso nos cards."""
+    allowed = {".mp4", ".mov", ".webm", ".mkv"}
+    suffix = Path(file.filename or "video.mp4").suffix.lower()
+    if suffix not in allowed:
+        raise HTTPException(400, f"Formato não suportado: {suffix}. Use: {', '.join(allowed)}")
+    videos_dir = ROOT / "assets" / "videos"
+    videos_dir.mkdir(parents=True, exist_ok=True)
+    dest = videos_dir / (file.filename or f"uploaded{suffix}")
+    dest.write_bytes(await file.read())
+    return {"name": dest.name, "ok": True}
+
+
+@app.post("/dyk/search-images")
+def dyk_search_images(req: ImageSearchRequest):
+    """Busca imagens adicionais via Pexels/Unsplash/Pixabay sem apagar o contexto atual."""
+    import sys as _sys
+    _sys.path.insert(0, str(ROOT))
+    from modules.assets.assets_didyouknow import DYKAssetsModule
+    per_source = max(1, min(10, req.per_source))
+    try:
+        images = DYKAssetsModule().search(req.query, per_source=per_source)
+        return {"images": images, "query": req.query}
+    except Exception as e:
+        raise HTTPException(500, f"Erro na busca de imagens: {e}")
+
+
 @app.post("/dyk/generate")
 def dyk_generate(req: DYKGenerateRequest):
-    """Gera fatos DYK via Groq + candidatos de imagem do Pexels."""
+    """ Gera fatos DYK via Groq + candidatos de imagem nos provedores de imagem disponíveis. """
     import sys as _sys
     _sys.path.insert(0, str(ROOT))
     from modules.intelligence.intelligence_didyouknow import DYKIntelligenceModule
@@ -354,6 +388,7 @@ def dyk_generate(req: DYKGenerateRequest):
     groq_cfg = config.get("groq", {"temperature": 0.8, "max_tokens": 1024})
     dyk_cfg  = config.get("did-you-know", {})
     num_facts = req.num_facts or dyk_cfg.get("num_facts", 5)
+    imgs_per_source = dyk_cfg.get("imgs_per_source", 3)
 
     try:
         content = DYKIntelligenceModule().run(
@@ -368,7 +403,7 @@ def dyk_generate(req: DYKGenerateRequest):
         raise HTTPException(500, f"Erro ao gerar fatos: {e}")
 
     queries = [f.image_query for f in content.facts]
-    candidates_per_fact = DYKAssetsModule().search_all(queries, per_source=3)
+    candidates_per_fact = DYKAssetsModule().search_all(queries, per_source=imgs_per_source)
 
     facts_out = [
         {
@@ -417,13 +452,22 @@ async def dyk_render(req: DYKRenderRequest):
                 raise HTTPException(502, f"Erro ao baixar imagem {i}: {e}")
             fact_props.append({"text": fact.text, "image": img_filename})
 
-    # Config de duração
-    fps          = config.get("layout", {}).get("fps", 30)
-    card_seconds = config.get("did-you-know", {}).get("card_duration_seconds", 9)
-    card_frames  = int(card_seconds * fps)
-    total_frames = len(fact_props) * card_frames
+    # Config de duração — suporte a override por card
+    fps              = config.get("layout", {}).get("fps", 30)
+    default_seconds  = config.get("did-you-know", {}).get("card_duration_seconds", 9)
+    default_frames   = int(default_seconds * fps)
 
-    props: dict = {"facts": fact_props, "cardFrames": card_frames}
+    card_frames_list = [
+        int((fact.duration_seconds or default_seconds) * fps)
+        for fact in req.facts
+    ]
+    total_frames = sum(card_frames_list)
+
+    props: dict = {
+        "facts": fact_props,
+        "cardFrames": default_frames,
+        "cardFramesList": card_frames_list,
+    }
 
     # Música — usa override se fornecido, senão fallback do perfil
     if req.music_name:
@@ -501,6 +545,24 @@ async def dyk_render(req: DYKRenderRequest):
         if proc.returncode == 0:
             for img_file in public_dir.glob("dyk_img_*"):
                 img_file.unlink(missing_ok=True)
+            # Gera metadata SEO
+            try:
+                import sys as _sys2
+                _sys2.path.insert(0, str(ROOT))
+                from modules.intelligence.intelligence_didyouknow import DYKIntelligenceModule
+                meta = DYKIntelligenceModule().generate_metadata(
+                    topic=req.topic or "",
+                    facts=[f.text for f in req.facts],
+                    language=profile.get("language", "pt-BR"),
+                )
+                meta_dir = ROOT / "output" / "metadata"
+                meta_dir.mkdir(parents=True, exist_ok=True)
+                (meta_dir / f"{job_id}.json").write_text(
+                    json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8"
+                )
+                jobs[job_id]["metadata"] = meta
+            except Exception as _me:
+                jobs[job_id]["metadata_error"] = str(_me)
 
     asyncio.create_task(asyncio.to_thread(_run_sync))
     return {"job_id": job_id}

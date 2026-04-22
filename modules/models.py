@@ -96,6 +96,13 @@ class DidYouKnowContent:
 
 
 @dataclass
+class DYKMetadata:
+    title: str
+    description: str
+    hashtags: list[str]
+
+
+@dataclass
 class PipelineContext:
     profile_name: str
     config: dict
