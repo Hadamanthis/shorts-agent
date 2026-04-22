@@ -9,6 +9,7 @@ import React, { useState } from 'react';
 import DashboardPage from './pages/DashboardPage';
 import ConfigPage from './pages/ConfigPage';
 import ShortsPage from './pages/ShortsPage';
+import CurationPage from './pages/CurationPage';
 
 // ── API helper ────────────────────────────────────────────────────────────────
 export const API_BASE = 'http://localhost:8000';
@@ -23,7 +24,9 @@ export async function apiFetch(path: string, opts?: RequestInit) {
 }
 
 // ── Types ─────────────────────────────────────────────────────────────────────
-type Page = 'dashboard' | 'config' | 'shorts';
+type Page = 'dashboard' | 'config' | 'shorts' | 'curation';
+
+interface CurationConfig { topic: string; profile: string; }
 
 const NAV: { id: Page; label: string; icon: string }[] = [
   { id: 'dashboard', label: 'Pipeline',   icon: '▶' },
@@ -33,7 +36,13 @@ const NAV: { id: Page; label: string; icon: string }[] = [
 
 // ── Component ─────────────────────────────────────────────────────────────────
 export default function AppRouter() {
-  const [page, setPage] = useState<Page>('dashboard');
+  const [page, setPage]           = useState<Page>('dashboard');
+  const [curation, setCuration]   = useState<CurationConfig | null>(null);
+
+  function goToCuration(topic: string, profile: string) {
+    setCuration({ topic, profile });
+    setPage('curation');
+  }
 
   return (
     <div style={s.root}>
@@ -65,9 +74,16 @@ export default function AppRouter() {
       </aside>
 
       <main style={s.main}>
-        {page === 'dashboard' && <DashboardPage />}
+        {page === 'dashboard' && <DashboardPage onGoToCuration={goToCuration} />}
         {page === 'config'    && <ConfigPage />}
         {page === 'shorts'    && <ShortsPage />}
+        {page === 'curation'  && curation && (
+          <CurationPage
+            initialTopic={curation.topic}
+            profile={curation.profile}
+            onBack={() => setPage('dashboard')}
+          />
+        )}
       </main>
     </div>
   );

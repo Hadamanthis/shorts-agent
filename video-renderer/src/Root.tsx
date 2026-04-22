@@ -3,6 +3,8 @@ import { ComentarioVideo } from './templates/ComentarioVideo';
 import type { ComentarioVideoProps } from './templates/ComentarioVideo';
 import { ComentarioImagem } from './templates/ComentarioImagem';
 import type { ComentarioImagemProps } from './templates/ComentarioImagem';
+import { DidYouKnow } from './templates/DidYouKnow';
+import type { DidYouKnowProps } from './templates/DidYouKnow';
 import AppRouter from './ui/AppRouter';
 
 const FPS = 30;
@@ -45,6 +47,25 @@ export const RemotionRoot: React.FC = () => {
           avatar: 'avatar.png',
           bgVideo: 'bg_looped.mp4',
         } satisfies ComentarioImagemProps}
+      />
+
+      <Composition
+        id="DidYouKnow"
+        component={DidYouKnow as React.FC<DidYouKnowProps>}
+        durationInFrames={5 * 270}
+        fps={FPS}
+        width={1080}
+        height={1920}
+        defaultProps={{
+          facts: [
+            { text: 'O mel nunca estraga — arqueólogos encontraram mel de 3.000 anos comestível no Egito.', image: 'dyk_img_00.jpg' },
+            { text: 'Uma colher de sopa de solo saudável contém mais micro-organismos do que pessoas na Terra.', image: 'dyk_img_01.jpg' },
+            { text: 'O coração de um camarão fica na sua cabeça.', image: 'dyk_img_02.jpg' },
+            { text: 'A Groenlândia é tecnicamente a maior ilha do mundo — mas 80% dela é coberta de gelo.', image: 'dyk_img_03.jpg' },
+            { text: 'Polvos têm três corações e sangue azul.', image: 'dyk_img_04.jpg' },
+          ],
+          cardFrames: 9 * FPS,
+        } satisfies DidYouKnowProps}
       />
 
       {/*

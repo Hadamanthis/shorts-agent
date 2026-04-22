@@ -91,6 +91,19 @@ class CreateProfileRequest(BaseModel):
 class OpenFolderRequest(BaseModel):
     path: str
 
+class DYKGenerateRequest(BaseModel):
+    topic: str
+    profile: str = "Synthvator"
+    num_facts: int = 5
+
+class DYKFactInput(BaseModel):
+    text: str
+    image_url: str
+
+class DYKRenderRequest(BaseModel):
+    facts: list[DYKFactInput]
+    profile: str = "Synthvator"
+
 
 # ── Config endpoints ──────────────────────────────────────────────────────────
 
@@ -287,6 +300,149 @@ def open_folder(req: OpenFolderRequest):
 
 
 # ── Subreddits ────────────────────────────────────────────────────────────────
+
+@app.post("/dyk/generate")
+def dyk_generate(req: DYKGenerateRequest):
+    """Gera fatos DYK via Groq + candidatos de imagem do Pexels."""
+    import sys as _sys
+    _sys.path.insert(0, str(ROOT))
+    from modules.intelligence.intelligence_didyouknow import DYKIntelligenceModule
+    from modules.assets.assets_didyouknow import DYKAssetsModule
+
+    config = load_config()
+    if req.profile not in config.get("profiles", {}):
+        raise HTTPException(400, f"Perfil '{req.profile}' não encontrado")
+
+    profile  = config["profiles"][req.profile]
+    groq_cfg = config.get("groq", {"temperature": 0.8, "max_tokens": 1024})
+    dyk_cfg  = config.get("did-you-know", {})
+    num_facts = req.num_facts or dyk_cfg.get("num_facts", 5)
+
+    try:
+        content = DYKIntelligenceModule().run(
+            topic=req.topic,
+            num_facts=num_facts,
+            language=profile.get("language", "pt-BR"),
+            niche=profile.get("niche", "curiosidades"),
+            temperature=float(groq_cfg.get("temperature", 0.8)),
+            max_tokens=int(groq_cfg.get("max_tokens", 1024)),
+        )
+    except Exception as e:
+        raise HTTPException(500, f"Erro ao gerar fatos: {e}")
+
+    queries = [f.image_query for f in content.facts]
+    candidates_per_fact = DYKAssetsModule().search_all(queries, per_page=3)
+
+    facts_out = [
+        {
+            "text":        fact.text,
+            "image_query": fact.image_query,
+            "candidates":  candidates_per_fact[i] if i < len(candidates_per_fact) else [],
+        }
+        for i, fact in enumerate(content.facts)
+    ]
+    return {"topic": content.topic, "facts": facts_out}
+
+
+@app.post("/dyk/render")
+async def dyk_render(req: DYKRenderRequest):
+    """Baixa imagens escolhidas e renderiza o template DidYouKnow via Remotion."""
+    import shutil
+    import urllib.request as _ur
+
+    config = load_config()
+    if req.profile not in config.get("profiles", {}):
+        raise HTTPException(400, f"Perfil '{req.profile}' não encontrado")
+
+    profile    = config["profiles"][req.profile]
+    public_dir = ROOT / "video-renderer" / "public"
+    public_dir.mkdir(parents=True, exist_ok=True)
+
+    # Download das imagens escolhidas
+    fact_props: list[dict] = []
+    for i, fact in enumerate(req.facts):
+        img_filename = f"dyk_img_{i:02d}.jpg"
+        img_path     = public_dir / img_filename
+        try:
+            r = _ur.Request(fact.image_url, headers={"User-Agent": "shorts-agent/1.0"})
+            with _ur.urlopen(r, timeout=15) as resp:
+                img_path.write_bytes(resp.read())
+        except Exception as e:
+            raise HTTPException(502, f"Erro ao baixar imagem {i}: {e}")
+        fact_props.append({"text": fact.text, "image": img_filename})
+
+    # Config de duração
+    fps          = config.get("layout", {}).get("fps", 30)
+    card_seconds = config.get("did-you-know", {}).get("card_duration_seconds", 9)
+    card_frames  = int(card_seconds * fps)
+    total_frames = len(fact_props) * card_frames
+
+    props: dict = {"facts": fact_props, "cardFrames": card_frames}
+
+    # Música
+    music_cfg = profile.get("music_path")
+    if music_cfg:
+        music_src = ROOT / music_cfg
+        if music_src.exists():
+            music_dst = public_dir / music_src.name
+            if not music_dst.exists():
+                shutil.copy2(str(music_src), str(music_dst))
+            props["music"] = music_src.name
+
+    # Avatar
+    avatar_cfg = profile.get("avatar_path", "")
+    if avatar_cfg:
+        avatar_src = ROOT / avatar_cfg
+        if avatar_src.exists():
+            avatar_dst = public_dir / avatar_src.name
+            if not avatar_dst.exists():
+                shutil.copy2(str(avatar_src), str(avatar_dst))
+            props["avatar"] = avatar_src.name
+
+    props["nome"] = profile.get("account_name", "")
+
+    # Configura job
+    job_id = datetime.now().strftime("%Y%m%d_%H%M%S")
+    jobs[job_id] = {"status": "running", "log": [], "started_at": datetime.now().isoformat()}
+
+    import platform as _plat
+    npx          = "npx.cmd" if _plat.system() == "Windows" else "npx"
+    remotion_dir = ROOT / "video-renderer"
+    output_dir   = ROOT / "output" / "shorts"
+    output_dir.mkdir(parents=True, exist_ok=True)
+    output_path = output_dir / f"dyk_{req.profile}_{job_id}.mp4"
+
+    cmd = [
+        npx, "remotion", "render",
+        "src/index.ts",
+        "DidYouKnow",
+        str(output_path),
+        "--props", json.dumps(props, ensure_ascii=False),
+        "--duration", str(total_frames),
+        "--fps", str(fps),
+        "--offthread-video-cache-size-in-bytes", "512000000",
+    ]
+
+    async def _run():
+        env = {**__import__('os').environ, "PYTHONIOENCODING": "utf-8", "PYTHONUTF8": "1"}
+        proc = await asyncio.create_subprocess_exec(
+            *cmd,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.STDOUT,
+            cwd=str(remotion_dir),
+            env=env,
+        )
+        async for raw in proc.stdout:
+            line = raw.decode("utf-8", errors="replace").rstrip()
+            jobs[job_id]["log"].append(line)
+        await proc.wait()
+        jobs[job_id]["status"]      = "done" if proc.returncode == 0 else "error"
+        jobs[job_id]["returncode"]  = proc.returncode
+        jobs[job_id]["finished_at"] = datetime.now().isoformat()
+
+    asyncio.create_task(_run())
+    return {"job_id": job_id}
+
 
 @app.get("/subreddits/suggestions")
 def subreddit_suggestions():

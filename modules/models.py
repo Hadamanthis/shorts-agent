@@ -81,6 +81,21 @@ class RenderedShort:
 
 
 @dataclass
+class DidYouKnowFact:
+    text: str
+    image_query: str
+    candidates: list[str] = field(default_factory=list)
+    chosen_image: Optional[str] = None
+
+
+@dataclass
+class DidYouKnowContent:
+    topic: str
+    facts: list[DidYouKnowFact]
+    language: str = "pt-BR"
+
+
+@dataclass
 class PipelineContext:
     profile_name: str
     config: dict

@@ -42,7 +42,11 @@ interface RedditPost {
 type Step = 'form' | 'picking' | 'running';
 
 // ── Component ─────────────────────────────────────────────────────────────────
-export default function DashboardPage() {
+export default function DashboardPage({
+  onGoToCuration,
+}: {
+  onGoToCuration?: (topic: string, profile: string) => void;
+}) {
   const [profiles, setProfiles]       = useState<Record<string, Profile>>({});
   const [suggestions, setSuggestions] = useState<SubredditSuggestion[]>([]);
   const [jobs, setJobs]               = useState<Job[]>([]);
@@ -55,6 +59,7 @@ export default function DashboardPage() {
   const [tone,      setTone]      = useState('humoristico');
   const [imageUrl,  setImageUrl]  = useState('');
   const [videoUrl,  setVideoUrl]  = useState('');
+  const [dykTopic,  setDykTopic]  = useState('');
 
   // Posts Reddit
   const [step,         setStep]         = useState<Step>('form');
@@ -130,13 +135,18 @@ export default function DashboardPage() {
     setStep('running');
     setActiveJob({ job_id: '...', status: 'running', started_at: new Date().toISOString(), log: [] });
 
-    const body: Record<string, unknown> = { template, profile, comment_tone: tone };
+    // comentario-assets usa o mesmo pipeline backend que comentario-reddit
+    const effectiveTemplate = template === 'comentario-assets' ? 'comentario-reddit' : template;
+    const body: Record<string, unknown> = { template: effectiveTemplate, profile, comment_tone: tone };
 
     if (template === 'comentario-reddit') {
       if (imageUrl)                     body.image_url  = imageUrl;
       else if (videoUrl)                body.video_url  = videoUrl;
       else if (postIndex !== undefined) { body.post_index = postIndex; body.subreddit = subreddit; }
       else                              body.subreddit  = subreddit;
+    } else if (template === 'comentario-assets') {
+      if (imageUrl)       body.image_url = imageUrl;
+      else if (videoUrl)  body.video_url = videoUrl;
     } else {
       body.url = ytUrl;
     }
@@ -161,6 +171,8 @@ export default function DashboardPage() {
   }
 
   const isReddit    = template === 'comentario-reddit';
+  const isAssets    = template === 'comentario-assets';
+  const isDYK       = template === 'did-you-know';
   const useDirectUrl = isReddit && (!!imageUrl || !!videoUrl);
 
   return (
@@ -176,6 +188,8 @@ export default function DashboardPage() {
             <select style={s.select} value={template}
               onChange={e => { setTemplate(e.target.value); setStep('form'); }}>
               <option value="comentario-reddit">Reddit</option>
+              <option value="comentario-assets">Assets (URL/Imagem)</option>
+              <option value="did-you-know">Did You Know?</option>
               <option value="comentario-youtube">YouTube</option>
             </select>
           </Field>
@@ -199,7 +213,53 @@ export default function DashboardPage() {
             </select>
           </Field>
 
-          {isReddit ? (
+          {isDYK ? (
+            <>
+              <Field label="Tópico">
+                <input
+                  style={s.input}
+                  value={dykTopic}
+                  onChange={e => setDykTopic(e.target.value)}
+                  placeholder="Ex: Oceano, Roma Antiga, Buracos Negros..."
+                />
+              </Field>
+              <div style={{ marginBottom: 10, fontSize: 12, color: '#6b7280', lineHeight: 1.5 }}>
+                O LLM gera fatos sobre o tópico + busca imagens no Pexels.
+                Você revisa e edita antes de renderizar.
+              </div>
+              <button
+                style={{ ...s.btnRun, ...((!dykTopic.trim()) ? s.btnDisabled : {}) }}
+                onClick={() => onGoToCuration?.(dykTopic, profile)}
+                disabled={!dykTopic.trim()}
+              >
+                ✦  Ir para Curadoria
+              </button>
+            </>
+          ) : isAssets ? (
+            <>
+              <Field label="URL da imagem ou vídeo">
+                <input
+                  style={s.input}
+                  value={imageUrl}
+                  onChange={e => { setImageUrl(e.target.value); setVideoUrl(''); }}
+                  placeholder="https://... (imagem)"
+                />
+                <input
+                  style={{ ...s.input, marginTop: 6 }}
+                  value={videoUrl}
+                  onChange={e => { setVideoUrl(e.target.value); setImageUrl(''); }}
+                  placeholder="https://... (vídeo)"
+                />
+              </Field>
+              <button
+                style={{ ...s.btnRun, ...((running || (!imageUrl && !videoUrl)) ? s.btnDisabled : {}) }}
+                onClick={() => handleRun()}
+                disabled={running || (!imageUrl && !videoUrl)}
+              >
+                {running ? '⟳  Executando...' : '▶  Gerar short'}
+              </button>
+            </>
+          ) : isReddit ? (
             <>
               <Field label="Subreddit">
                 <input

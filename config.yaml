@@ -50,6 +50,10 @@ comentario-reddit:
   max_clip_duration: 30
   clip_start_offset: 0
   short_duration: 30
+did-you-know:
+  num_facts: 5
+  card_duration_seconds: 9
+
 comentario-youtube:
   max_comments_to_fetch: 20
   top_comments_for_context: 10
