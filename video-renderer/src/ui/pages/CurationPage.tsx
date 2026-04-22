@@ -28,14 +28,18 @@ export default function CurationPage({
   profile: string;
   onBack: () => void;
 }) {
-  const [topic,   setTopic]   = useState(initialTopic);
-  const [loading, setLoading] = useState(false);
-  const [error,   setError]   = useState('');
+  const [topic,      setTopic]      = useState(initialTopic);
+  const [numCards,   setNumCards]   = useState(5);
+  const [loading,    setLoading]    = useState(false);
+  const [error,      setError]      = useState('');
 
   const [slots,      setSlots]      = useState<CardSlot[]>([]);
   const [imagePool,  setImagePool]  = useState<string[]>([]);
   const [factPool,   setFactPool]   = useState<string[]>([]);
   const [customUrl,  setCustomUrl]  = useState('');
+
+  const [musicList,     setMusicList]     = useState<{name: string}[]>([]);
+  const [selectedMusic, setSelectedMusic] = useState<string>('');
 
   const dragRef    = useRef<DragPayload | null>(null);
   const [dropTarget, setDropTarget] = useState<string | null>(null);
@@ -45,7 +49,10 @@ export default function CurationPage({
   const logRef  = useRef<HTMLDivElement>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  useEffect(() => { if (initialTopic) handleGenerate(); }, []); // eslint-disable-line
+  useEffect(() => {
+    apiFetch('/music').then((list: {name: string}[]) => setMusicList(list)).catch(() => {});
+    if (initialTopic) handleGenerate();
+  }, []); // eslint-disable-line
 
   useEffect(() => {
     if (logRef.current) logRef.current.scrollTop = logRef.current.scrollHeight;
@@ -58,10 +65,11 @@ export default function CurationPage({
     try {
       const data = await apiFetch('/dyk/generate', {
         method: 'POST',
-        body: JSON.stringify({ topic: topic.trim(), profile }),
+        body: JSON.stringify({ topic: topic.trim(), profile, num_facts: numCards * 2 }),
       });
       const facts: RawFact[] = data.facts;
-      setSlots(Array.from({ length: facts.length }, () => ({ image: null, fact: null })));
+      // Slots = numCards vazios; pool tem todos os fatos (2x)
+      setSlots(Array.from({ length: numCards }, () => ({ image: null, fact: null })));
       setFactPool(facts.map(f => f.text));
       setImagePool(Array.from(new Set(facts.flatMap(f => f.candidates))));
     } catch (e) {
@@ -176,6 +184,7 @@ export default function CurationPage({
         body: JSON.stringify({
           profile,
           facts: slots.map(s => ({ text: s.fact, image_url: s.image })),
+          music_name: selectedMusic || undefined,
         }),
       });
       startPolling(job_id);
@@ -207,6 +216,14 @@ export default function CurationPage({
           placeholder="Ex: Oceano, Roma Antiga, Buracos Negros..."
           onKeyDown={e => e.key === 'Enter' && !loading && handleGenerate()}
         />
+          <div style={s.numCardsWrap}>
+          <label style={s.numCardsLabel}>Cards</label>
+          <input
+            type="number" min={1} max={20} style={s.numCardsInput}
+            value={numCards}
+            onChange={e => setNumCards(Math.max(1, Math.min(20, parseInt(e.target.value) || 5)))}
+          />
+        </div>
         <button
           style={{ ...s.btnGenerate, ...(loading ? s.btnDisabled : {}) }}
           onClick={handleGenerate} disabled={loading}
@@ -214,6 +231,23 @@ export default function CurationPage({
           {loading ? '⟳  Gerando...' : '✦  Gerar fatos'}
         </button>
       </div>
+
+      {/* Music selector */}
+      {musicList.length > 0 && (
+        <div style={s.musicRow}>
+          <span style={s.musicLabel}>🎵 Música</span>
+          <select
+            style={s.musicSelect}
+            value={selectedMusic}
+            onChange={e => setSelectedMusic(e.target.value)}
+          >
+            <option value="">Padrão do perfil</option>
+            {musicList.map(m => (
+              <option key={m.name} value={m.name}>{m.name}</option>
+            ))}
+          </select>
+        </div>
+      )}
 
       {error && <div style={s.errorBox}>{error}</div>}
 
@@ -489,6 +523,22 @@ const s: Record<string, React.CSSProperties> = {
   btnAddUrl: {
     padding: '7px 14px', background: '#374151', border: 'none', borderRadius: 6,
     color: '#e5e7eb', fontSize: 12, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap',
+  },
+  numCardsWrap: {
+    display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0,
+  },
+  numCardsLabel: { fontSize: 12, color: '#9ca3af', whiteSpace: 'nowrap' as const },
+  numCardsInput: {
+    width: 52, background: '#0f1117', border: '1px solid #374151', borderRadius: 6,
+    padding: '9px 8px', color: '#e5e7eb', fontSize: 14, outline: 'none', textAlign: 'center' as const,
+  },
+  musicRow: {
+    display: 'flex', alignItems: 'center', gap: 10, marginBottom: 18,
+  },
+  musicLabel: { fontSize: 13, color: '#9ca3af', flexShrink: 0 },
+  musicSelect: {
+    flex: 1, background: '#0f1117', border: '1px solid #374151', borderRadius: 7,
+    padding: '8px 12px', color: '#e5e7eb', fontSize: 13, outline: 'none',
   },
   btnRender: {
     width: '100%', padding: '12px', background: '#059669', border: 'none',
