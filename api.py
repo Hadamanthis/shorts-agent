@@ -33,7 +33,7 @@ app = FastAPI(title="Shorts Creator API", version="1.0.0")
 # Permite requisições do Remotion Studio (porta 3000)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://localhost:3001", "http://localhost:5173", "http://localhost:5174"],
+    allow_origins=["*"],
     allow_methods=["*"],
     allow_headers=["*"],
 )
