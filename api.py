@@ -331,7 +331,7 @@ def dyk_generate(req: DYKGenerateRequest):
         raise HTTPException(500, f"Erro ao gerar fatos: {e}")
 
     queries = [f.image_query for f in content.facts]
-    candidates_per_fact = DYKAssetsModule().search_all(queries, per_page=3)
+    candidates_per_fact = DYKAssetsModule().search_all(queries, per_source=3)
 
     facts_out = [
         {
