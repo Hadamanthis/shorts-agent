@@ -87,6 +87,7 @@ class CreateProfileRequest(BaseModel):
     avatar_path: str = "assets/profiles/synthvator.png"
     background_video: str = "assets/backgrounds/bg_default.mp4"
     music_path: str = "assets/music/bg_music.mp3"
+    cta_video_path: str = ""
 
 class OpenFolderRequest(BaseModel):
     path: str
@@ -103,6 +104,7 @@ class DYKFactInput(BaseModel):
 class DYKRenderRequest(BaseModel):
     facts: list[DYKFactInput]
     profile: str = "Synthvator"
+    music_name: Optional[str] = None  # override da música do perfil
 
 
 # ── Config endpoints ──────────────────────────────────────────────────────────
@@ -137,6 +139,7 @@ def create_profile(req: CreateProfileRequest):
         "avatar_path": req.avatar_path,
         "background_video": req.background_video,
         "music_path": req.music_path,
+        "cta_video_path": req.cta_video_path,
     }
     save_config(config)
     return {"ok": True}
@@ -301,6 +304,40 @@ def open_folder(req: OpenFolderRequest):
 
 # ── Subreddits ────────────────────────────────────────────────────────────────
 
+@app.get("/music")
+def list_music():
+    """Lista arquivos de música disponíveis em assets/music/."""
+    music_dir = ROOT / "assets" / "music"
+    if not music_dir.exists():
+        return []
+    extensions = {".mp3", ".wav", ".ogg", ".m4a", ".flac"}
+    files = sorted(f for f in music_dir.iterdir() if f.suffix.lower() in extensions)
+    return [{"name": f.name, "path": str(f)} for f in files]
+
+
+@app.get("/videos")
+def list_videos():
+    """Lista vídeos locais disponíveis em assets/videos/."""
+    videos_dir = ROOT / "assets" / "videos"
+    if not videos_dir.exists():
+        return []
+    extensions = {".mp4", ".mov", ".webm", ".mkv"}
+    files = sorted(f for f in videos_dir.iterdir() if f.suffix.lower() in extensions)
+    return [{"name": f.name, "path": str(f)} for f in files]
+
+
+@app.post("/cleanup")
+def cleanup_public():
+    """Remove imagens temporárias dyk_img_* da pasta public do Remotion."""
+    public_dir = ROOT / "video-renderer" / "public"
+    deleted = []
+    if public_dir.exists():
+        for f in public_dir.glob("dyk_img_*"):
+            f.unlink(missing_ok=True)
+            deleted.append(f.name)
+    return {"deleted": deleted, "count": len(deleted)}
+
+
 @app.post("/dyk/generate")
 def dyk_generate(req: DYKGenerateRequest):
     """Gera fatos DYK via Groq + candidatos de imagem do Pexels."""
@@ -358,18 +395,27 @@ async def dyk_render(req: DYKRenderRequest):
     public_dir = ROOT / "video-renderer" / "public"
     public_dir.mkdir(parents=True, exist_ok=True)
 
-    # Download das imagens escolhidas
+    # Download das imagens / cópia de vídeos locais escolhidos
     fact_props: list[dict] = []
     for i, fact in enumerate(req.facts):
-        img_filename = f"dyk_img_{i:02d}.jpg"
-        img_path     = public_dir / img_filename
-        try:
-            r = _ur.Request(fact.image_url, headers={"User-Agent": "shorts-agent/1.0"})
-            with _ur.urlopen(r, timeout=15) as resp:
-                img_path.write_bytes(resp.read())
-        except Exception as e:
-            raise HTTPException(502, f"Erro ao baixar imagem {i}: {e}")
-        fact_props.append({"text": fact.text, "image": img_filename})
+        if fact.image_url.startswith("video:"):
+            # Vídeo local de assets/videos/
+            video_name = fact.image_url[6:]
+            video_src  = ROOT / "assets" / "videos" / video_name
+            video_dst  = public_dir / video_name
+            if video_src.exists() and not video_dst.exists():
+                shutil.copy2(str(video_src), str(video_dst))
+            fact_props.append({"text": fact.text, "video": video_name})
+        else:
+            img_filename = f"dyk_img_{i:02d}.jpg"
+            img_path     = public_dir / img_filename
+            try:
+                r = _ur.Request(fact.image_url, headers={"User-Agent": "shorts-agent/1.0"})
+                with _ur.urlopen(r, timeout=15) as resp:
+                    img_path.write_bytes(resp.read())
+            except Exception as e:
+                raise HTTPException(502, f"Erro ao baixar imagem {i}: {e}")
+            fact_props.append({"text": fact.text, "image": img_filename})
 
     # Config de duração
     fps          = config.get("layout", {}).get("fps", 30)
@@ -379,15 +425,17 @@ async def dyk_render(req: DYKRenderRequest):
 
     props: dict = {"facts": fact_props, "cardFrames": card_frames}
 
-    # Música
-    music_cfg = profile.get("music_path")
-    if music_cfg:
-        music_src = ROOT / music_cfg
-        if music_src.exists():
-            music_dst = public_dir / music_src.name
-            if not music_dst.exists():
-                shutil.copy2(str(music_src), str(music_dst))
-            props["music"] = music_src.name
+    # Música — usa override se fornecido, senão fallback do perfil
+    if req.music_name:
+        music_src = ROOT / "assets" / "music" / req.music_name
+    else:
+        music_cfg = profile.get("music_path")
+        music_src = ROOT / music_cfg if music_cfg else None
+    if music_src and music_src.exists():
+        music_dst = public_dir / music_src.name
+        if not music_dst.exists():
+            shutil.copy2(str(music_src), str(music_dst))
+        props["music"] = music_src.name
 
     # Avatar
     avatar_cfg = profile.get("avatar_path", "")
@@ -400,6 +448,16 @@ async def dyk_render(req: DYKRenderRequest):
             props["avatar"] = avatar_src.name
 
     props["nome"] = profile.get("account_name", "")
+
+    # CTA video por perfil
+    cta_path_cfg = profile.get("cta_video_path", "")
+    if cta_path_cfg:
+        cta_src = ROOT / cta_path_cfg
+        if cta_src.exists():
+            cta_dst = public_dir / cta_src.name
+            if not cta_dst.exists():
+                shutil.copy2(str(cta_src), str(cta_dst))
+            props["ctaVideo"] = cta_src.name
 
     # Configura job
     job_id = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -423,24 +481,28 @@ async def dyk_render(req: DYKRenderRequest):
         "--offthread-video-cache-size-in-bytes", "512000000",
     ]
 
-    async def _run():
+    def _run_sync():
+        import subprocess
         env = {**__import__('os').environ, "PYTHONIOENCODING": "utf-8", "PYTHONUTF8": "1"}
-        proc = await asyncio.create_subprocess_exec(
-            *cmd,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.STDOUT,
+        proc = subprocess.Popen(
+            cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
             cwd=str(remotion_dir),
             env=env,
         )
-        async for raw in proc.stdout:
+        for raw in proc.stdout:
             line = raw.decode("utf-8", errors="replace").rstrip()
             jobs[job_id]["log"].append(line)
-        await proc.wait()
+        proc.wait()
         jobs[job_id]["status"]      = "done" if proc.returncode == 0 else "error"
         jobs[job_id]["returncode"]  = proc.returncode
         jobs[job_id]["finished_at"] = datetime.now().isoformat()
+        if proc.returncode == 0:
+            for img_file in public_dir.glob("dyk_img_*"):
+                img_file.unlink(missing_ok=True)
 
-    asyncio.create_task(_run())
+    asyncio.create_task(asyncio.to_thread(_run_sync))
     return {"job_id": job_id}
 
 
