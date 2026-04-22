@@ -112,6 +112,69 @@ def load_video_source(url: str) -> Optional[VideoSource]:
 
 class RedditIngestionModule:
 
+    def fetch_posts_data(self, cfg: dict) -> list[dict]:
+        """
+        Retorna lista de posts prontos para exibição em GUI/API.
+        Não faz download de mídia — apenas metadata.
+        Cada item tem: index, title, score, num_comments, post_type, duration, thumbnail_url, url
+        """
+        posts = self._find_posts(cfg)
+        result = []
+        for i, p in enumerate(posts):
+            result.append({
+                "index": i,
+                "title": p.get("title", ""),
+                "score": p.get("score", 0),
+                "num_comments": p.get("num_comments", 0),
+                "post_type": p.get("_post_type", "image"),
+                "duration": p.get("_duration", 0),
+                "thumbnail_url": self._best_preview_url(p),
+                "url": p.get("url", ""),
+                "permalink": p.get("permalink", ""),
+                "subreddit": p.get("subreddit_name_prefixed", ""),
+            })
+        return result
+
+    def _best_preview_url(self, p: dict) -> str:
+        """
+        Retorna a melhor URL de preview disponível para exibição na GUI.
+        Prioridade: preview.images resolutions (Reddit CDN) -> thumbnail direto.
+        URLs do Reddit CDN têm &amp; que precisa ser decodificado.
+        """
+        try:
+            previews = p.get("preview", {}).get("images", [])
+            if previews:
+                resolutions = previews[0].get("resolutions", [])
+                # Pega resolução ~320px de largura (terceira ou a maior disponível)
+                candidates = [r for r in resolutions if r.get("width", 0) >= 200]
+                chosen = candidates[0] if candidates else (resolutions[-1] if resolutions else None)
+                if chosen:
+                    return chosen["url"].replace("&amp;", "&")
+                # Fallback: source
+                source = previews[0].get("source", {})
+                if source.get("url"):
+                    return source["url"].replace("&amp;", "&")
+        except Exception:
+            pass
+        # Último recurso: thumbnail (pode ser bloqueada por CORS)
+        thumb = p.get("thumbnail", "")
+        if thumb and thumb not in ("default", "self", "nsfw", ""):
+            return thumb
+        return ""
+
+    def run_from_index(self, ctx: PipelineContext, posts_data: list[dict], index: int) -> Union[ImageSource, VideoSource]:
+        """
+        Processa um post já selecionado pela GUI (sem TUI).
+        posts_data deve ser a lista retornada por fetch_posts_data().
+        """
+        cfg = ctx.config.get("comentario-reddit", {})
+        # Re-fetch para ter os dados completos do post
+        all_posts = self._find_posts(cfg)
+        if index < 0 or index >= len(all_posts):
+            raise ValueError(f"Índice {index} fora do intervalo (0-{len(all_posts)-1})")
+        post = all_posts[index]
+        return self._process_post(post, ctx, cfg)
+
     def run_interactive(self, ctx: PipelineContext) -> Union[ImageSource, VideoSource]:
         """TUI paginada com todos os posts (imagem + vídeo) do subreddit."""
         cfg   = ctx.config.get("comentario-reddit", {})
@@ -328,13 +391,18 @@ class RedditIngestionModule:
             "-i", str(raw),
             "-t", str(max_dur),
             "-c:v", "libx264",
+            "-preset", "fast",        # <-- adiciona (era padrão implícito, agora explícito)
+            "-crf", "18",             # <-- adiciona (qualidade boa para o clip final)
+            "-g", "30",               # <-- adiciona: keyframe a cada 1s (30fps)
+            "-keyint_min", "30",      # <-- adiciona: força keyframe mínimo
+            "-sc_threshold", "0",     # <-- adiciona: desativa keyframe por cena
             "-c:a", "aac",
             "-vsync", "cfr",
             "-r", "30",
             "-movflags", "+faststart",
             str(dest),
         ]
-        logger.info(f"[Ingestion] Recortando {start_offset}s → {start_offset + max_dur}s")
+        logger.info(f"[Ingestion] Recortando {start_offset}s -> {start_offset + max_dur}s")
         result = subprocess.run(ffmpeg_cmd, capture_output=True, text=True, timeout=120)
         if result.returncode != 0:
             raise RuntimeError(f"FFmpeg falhou:\n{result.stderr}")

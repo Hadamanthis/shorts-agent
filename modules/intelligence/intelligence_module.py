@@ -35,6 +35,7 @@ _TONE_INSTRUCTIONS = {
     "humoristico": "O comentário deve ser bem-humorado e leve.",
     "reflexivo":   "O comentário deve soar reflexivo e pensativo.",
     "emocional":   "O comentário deve soar emocionado e tocado.",
+    "assustado":   "O comentário deve soar com medo ou receio"
 }
 
 
@@ -61,7 +62,7 @@ class IntelligenceModule:
         logger.info(f"[Intelligence] Gerando conteúdo para: {source.title}")
 
         system_prompt = self._build_system_prompt(language, niche)
-        user_prompt = self._build_user_prompt(source, content_cfg, language)
+        user_prompt = self._build_user_prompt(source, content_cfg, profile, language)
 
         response_text = self._call_groq(system_prompt, user_prompt, groq_cfg)
         content = self._parse_response(response_text, language)
@@ -88,10 +89,10 @@ class IntelligenceModule:
         """
 
     def _build_user_prompt(
-        self, source: VideoSource, content_cfg: dict, language: str
+        self, source: VideoSource, content_cfg: dict, profile, language: str
     ) -> str:
         tone_instruction = _TONE_INSTRUCTIONS.get(
-            content_cfg["comment_tone"], _TONE_INSTRUCTIONS["surpreso"]
+            profile["comment_tone"], _TONE_INSTRUCTIONS["surpreso"]
         )
         comments_block = "\n".join(
             f"  - {c}" for c in source.comments

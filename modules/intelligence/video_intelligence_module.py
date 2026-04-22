@@ -50,7 +50,7 @@ class VideoIntelligenceModule:
 
         logger.info(f"[VideoIntelligence] Gerando conteúdo para: {source.title[:60]}")
 
-        messages = self._build_messages(source, content_cfg, language, niche)
+        messages = self._build_messages(source, content_cfg, profile, language, niche)
         response_text = self._call_groq(messages, groq_cfg)
         content = self._parse_response(response_text, language)
 
@@ -58,9 +58,9 @@ class VideoIntelligenceModule:
         logger.info(f"[VideoIntelligence] Comentário: {content.comment_text[:60]}...")
         return content
 
-    def _build_messages(self, source: VideoSource, content_cfg: dict, language: str, niche: str) -> list[dict]:
+    def _build_messages(self, source: VideoSource, content_cfg: dict, profile: dict, language: str, niche: str) -> list[dict]:
         lang_instruction = _LANGUAGE_INSTRUCTIONS.get(language, _LANGUAGE_INSTRUCTIONS["pt-BR"])
-        tone_instruction = _TONE_INSTRUCTIONS.get(content_cfg["comment_tone"], _TONE_INSTRUCTIONS["surpreso"])
+        tone_instruction = _TONE_INSTRUCTIONS.get(profile["comment_tone"], _TONE_INSTRUCTIONS["surpreso"])
 
         context_block = f'Título do post: "{source.title}"\n'
         if source.channel_name:

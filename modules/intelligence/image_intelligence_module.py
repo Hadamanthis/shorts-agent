@@ -29,6 +29,7 @@ _TONE_INSTRUCTIONS = {
     "humoristico": "O comentário deve ser bem-humorado e fazendo boas referências.",
     "reflexivo":   "O comentário deve soar reflexivo e pensativo.",
     "emocional":   "O comentário deve soar emocionado e tocado.",
+    "assustado":   "O comentário deve soar com medo ou receio"
 }
 
 
@@ -56,7 +57,7 @@ class ImageIntelligenceModule:
             ".gif": "image/gif",
         }.get(image_source.image_path.suffix.lower(), "image/jpeg")
 
-        messages = self._build_messages(image_b64, media_type, image_source, content_cfg, language, niche)
+        messages = self._build_messages(image_b64, media_type, image_source, content_cfg, profile, language, niche)
         response_text = self._call_groq(messages, groq_cfg)
         content = self._parse_response(response_text, language)
 
@@ -64,9 +65,9 @@ class ImageIntelligenceModule:
         logger.info(f"[ImageIntelligence] Comentário: {content.comment_text[:60]}...")
         return content
 
-    def _build_messages(self, image_b64, media_type, image_source, content_cfg, language, niche):
+    def _build_messages(self, image_b64, media_type, image_source, content_cfg, profile, language, niche):
         lang_instruction = _LANGUAGE_INSTRUCTIONS.get(language, _LANGUAGE_INSTRUCTIONS["pt-BR"])
-        tone_instruction = _TONE_INSTRUCTIONS.get(content_cfg["comment_tone"], _TONE_INSTRUCTIONS["surpreso"])
+        tone_instruction = _TONE_INSTRUCTIONS.get(profile["comment_tone"], _TONE_INSTRUCTIONS["surpreso"])
 
         context_block = ""
         if image_source.title:

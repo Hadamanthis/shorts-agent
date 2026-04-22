@@ -8,6 +8,7 @@ import {
   interpolate,
 } from 'remotion';
 import { Html5Audio } from 'remotion';
+import { Video } from '@remotion/media';
 
 export type ComentarioVideoProps = {
   hook: string;
@@ -18,6 +19,7 @@ export type ComentarioVideoProps = {
   highlights?: string[];
   avatar?: string;
   bgVideo?: string;
+  clipDurationFrames?: number;
   music?: string;
 };
 
@@ -152,6 +154,7 @@ export const ComentarioVideo: React.FC<ComentarioVideoProps> = ({
   video, highlights = [],
   avatar = 'avatar.png',
   bgVideo = 'bg_looped.mp4',
+  clipDurationFrames,
   music,
 }) => {
   const { fps, durationInFrames } = useVideoConfig();
@@ -160,12 +163,12 @@ export const ComentarioVideo: React.FC<ComentarioVideoProps> = ({
   return (
     <AbsoluteFill style={{ backgroundColor: '#000' }}>
 
-      {/* FUNDO — Html5Video evita o bug de timebase do compositor Rust */}
-      <OffthreadVideo
+      {/* FUNDO — Loop garante que o bg reinicia antes do fim, evitando "No frame found" */}
+      <Video
         src={staticFile(bgVideo)}
-        style={{ width: '100%', height: '100%', objectFit: 'cover', opacity: 0.70 }}
-        playbackRate={1}
+        loop
         muted
+        style={{ width: '100%', height: '100%', objectFit: 'cover', opacity: 0.70 }}
       />
       <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(180deg, rgba(0,0,0,0.55) 0%, rgba(0,0,0,0.80) 100%)' }} />
 
@@ -195,7 +198,7 @@ export const ComentarioVideo: React.FC<ComentarioVideoProps> = ({
 
         {/* ZONA 2 — VÍDEO com zoom, mesmas proporções da imagem */}
         <div style={{ borderBottom: '1px solid rgba(255,255,255,0.06)', flexShrink: 0 }}>
-          <ClipVideo src={video} durationInFrames={durationInFrames} />
+          <ClipVideo src={video} durationInFrames={clipDurationFrames ?? durationInFrames} />
         </div>
 
         {/* ZONA 2.5 — STORY typewriter com highlight */}

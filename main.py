@@ -26,6 +26,12 @@ load_dotenv()
 
 from modules.models import PipelineContext, ImageSource, VideoSource
 
+# No Windows o stdout pode ser CP1252 — força UTF-8 para não travar em caracteres especiais
+if sys.platform == "win32":
+    import io
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
+    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding="utf-8", errors="replace")
+
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s | %(levelname)s | %(message)s",
@@ -88,11 +94,13 @@ def build_parser() -> argparse.ArgumentParser:
                      help="URL de vídeo direto, pula a listagem (comentario-reddit)")
     src.add_argument("--url", default=None, metavar="URL",
                      help="URL do YouTube (comentario-youtube)")
+    src.add_argument("--post-index", default=None, type=int, metavar="N",
+                     help="Índice do post Reddit já selecionado (bypassa TUI, usado pela GUI)")
 
     # ── Overrides de conteúdo ─────────────────────────────────────────────────
     ov = p.add_argument_group("overrides de config")
     ov.add_argument("--comment-tone",
-                    choices=["surpreso", "humoristico", "reflexivo", "emocional"])
+                    choices=["surpreso", "humoristico", "reflexivo", "emocional", "assustado"])
     ov.add_argument("--curiosity-max-chars", type=int, metavar="N")
     ov.add_argument("--comment-max-chars",   type=int, metavar="N")
 
@@ -120,13 +128,16 @@ def _run_reddit_pipeline(args, ctx) -> None:
         ctx.source = module.run_manual(ctx, args.image_url, mode="image")
     elif args.video_url:
         ctx.source = module.run_manual(ctx, args.video_url, mode="video")
+    elif getattr(args, "post_index", None) is not None:
+        # Vem da GUI — índice já escolhido, sem TUI
+        ctx.source = module.run_from_index(ctx, [], args.post_index)
     else:
         ctx.source = module.run_interactive(ctx)
 
     # Detecta o tipo do post escolhido
     render_template = "ComentarioImagem" if isinstance(ctx.source, ImageSource) else "ComentarioVideo"
     mode            = "image"            if isinstance(ctx.source, ImageSource) else "video"
-    logger.info(f"[Pipeline] Tipo detectado: {mode} → template: {render_template}")
+    logger.info(f"[Pipeline] Tipo detectado: {mode} -> template: {render_template}")
 
     # ── Intelligence ──────────────────────────────────────────────────────────
     if pipeline_cfg["run_intelligence"]:
@@ -199,7 +210,7 @@ def run_pipeline(args: argparse.Namespace) -> None:
     logger.info(f"Perfil: {args.profile} | Template: {args.template}")
 
     if args.template == "comentario-reddit":
-        if not args.image_url and not args.video_url and not args.subreddit:
+        if not args.image_url and not args.video_url and not args.subreddit and getattr(args, "post_index", None) is None:
             logger.error("--subreddit é obrigatório para comentario-reddit "
                          "(a menos que passe --image-url ou --video-url).")
             sys.exit(1)

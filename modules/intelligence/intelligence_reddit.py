@@ -39,6 +39,7 @@ _TONE_INSTRUCTIONS = {
     "humoristico": "O comentário deve ser bem-humorado e fazendo boas referências.",
     "reflexivo":   "O comentário deve soar reflexivo e pensativo.",
     "emocional":   "O comentário deve soar emocionado e tocado.",
+    "assustado":   "O comentário deve soar com medo ou receio"
 }
 
 
@@ -65,7 +66,7 @@ class RedditIntelligenceModule:
         title = source.title if hasattr(source, "title") else ""
         logger.info(f"[Intelligence] Gerando conteúdo para: {title[:60]}")
 
-        system_prompt = self._build_system_prompt(content_cfg, language, niche)
+        system_prompt = self._build_system_prompt(content_cfg, profile, language, niche)
 
         if mode == "image":
             assert isinstance(source, ImageSource)
@@ -83,55 +84,79 @@ class RedditIntelligenceModule:
 
     # ── System prompt (igual para ambos os modos) ─────────────────────────────
 
-    def _build_system_prompt(self, content_cfg: dict, language: str, niche: str) -> str:
+    def _build_system_prompt(self, content_cfg: dict, profile, language: str, niche: str) -> str:
         lang_instruction = _LANGUAGE_INSTRUCTIONS.get(language, _LANGUAGE_INSTRUCTIONS["pt-BR"])
-        tone_instruction = _TONE_INSTRUCTIONS.get(content_cfg["comment_tone"], _TONE_INSTRUCTIONS["surpreso"])
+        tone_instruction = _TONE_INSTRUCTIONS.get(profile["comment_tone"], _TONE_INSTRUCTIONS["surpreso"])
 
         return f"""Você é um roteirista de YouTube Shorts virais no nicho de {niche}.
 {lang_instruction}
 Sua única saída é um objeto JSON válido, sem texto antes ou depois, sem markdown, não use triplas aspas.
 
-Você gera conteúdo para um short de 45–60 segundos. Regras por campo:
+Você gera conteúdo para um short de 45–60 segundos. 
+Você faz buscas na internet em fontes confiáveis para adicionar informação.
+Regras por campo:
 
 HOOK — Manchete de jornal sensacionalista mas factual. Máximo 10 palavras.
   - Tom de manchete: direto, impactante, pode usar contraste ou ironia.
   - Use fatos reais: datas, lugares, números, nomes.
   - Pode exagerar o drama sem mentir.
+  - Exemplos: "Boston Enterrou Carros Vivos na Neve por Meses"
+              "A URSS Classificava Criminosos Pela Cara — E Acertava Poucos"
+              "Prefeitura Gastou Zero Reais Para 'Sumir' Com 6 Carros"
   - NUNCA use: "Incrível", "Chocante", "Você não vai acreditar".
   Máximo {content_cfg['curiosity_max_chars']} caracteres.
 
-STORY — A história por trás do conteúdo. Informativo, denso, envolvente.
-- Use o título e comentários como base — não invente fatos.
+STORY — A história por trás da imagem. Informativo, denso, envolvente.
+- Use o título e comentários do Reddit como base — não invente fatos, pesquise na internet para ter mais contexto.
 - Escreva como um parágrafo de enciclopédia reescrito por alguém que adora contar histórias.
-- Inclua: contexto histórico, como funcionava na prática, detalhes específicos e curiosos.
+- Inclua: contexto histórico, como funcionava na prática, detalhes específicos e curiosos,
+  consequências ou comparações que ajudem o espectador a visualizar.
+- Texto longo o suficiente para o espectador passar 15–20 segundos lendo.
 - Termine com uma afirmação conclusiva — sem perguntas, sem convites a comentar.
-- Mínimo 4 frases, máximo 7. Máximo {content_cfg['curiosity_max_chars'] * 3} caracteres.
+  Isso é papel do COMMENT, não do STORY.
+- Mínimo 4 frases, máximo 7.
 
-HIGHLIGHTS — Palavras ou expressões que trazem a maior parte do contexto.
+HIGHLIGHTS — Palavras ou expressões que trazem a maior parte do contexto e são as mais relevantes no que você escreveu.
   REGRAS OBRIGATÓRIAS:
-  - O PRIMEIRO item deve ser uma palavra ou expressão presente no HOOK, escrita exatamente igual.
-  - Os demais (mínimo 2, máximo 5) devem ser palavras ou expressões presentes no STORY, escritas exatamente igual.
-  - Escolha: datas, nomes de lugares, números com unidade, nomes próprios de maior relevância.
+  - O PRIMEIRO item deve ser uma palavra ou expressão presente no HOOK que você escreveu, escrita exatamente igual.
+  - Os demais (mínimo 2, máximo 5) devem ser palavras ou expressões presentes no STORY que você escreveu, escritas exatamente igual.
+    — copie exatamente como escreveu, incluindo acentos e maiúsculas.
+  - Escolha: datas, nomes de lugares, números com unidade, nomes próprios que tenham a maior relevância para o contexto.
   - NUNCA inclua somente artigos, preposições ou palavras comuns ("o", "de", "em", "e").
-  - Total: mínimo 3 itens, máximo 6 itens.
+  - Total: mínimo 6 itens, máximo 8.
 
-COMMENT — 2 frases sobre o assunto. Escreva como uma pessoa real comentando no YouTube.
+COMMENT — Apenas 2 frases sobre o assunto. Escreva como uma pessoa real comentando no YouTube e seja criativo.
+Imagine que você é alguém que acabou de ler o story e teve uma reação genuína, fazendo correlações para comentários inteligentes.
+- Não faça comentários genéricos! O comentário deve acrescentar o seu ponto de vista sobre o assunto.
+
 - Frase 1: reação direta e específica ao conteúdo — humor, ironia ou espanto natural.
-  Faça referência a um detalhe concreto do story.
-- Frase 2: pergunta ou provocação que convide discussão de forma natural — não um CTA genérico.
+  Sempre use um fato curioso que não foi dito no STORY, afim de adicionar ainda mais informação. 
+  Use uma busca na internet se for preciso. 
+
+- Frase 2: pergunta ou provocação que convide a discussão de forma natural — não um CTA.
+  Deve surgir da frase 1, não ser genérica.
+  Exemplos certos:
+    "Será que algum dia a gente vai parar de julgar cara por cara?"
+    "Imagina isso sendo usado hoje — quantas pessoas inocentes seriam fichadas?"
+  Exemplos errados:
+    "E você, o que acha?" / "Isso muda como você vê a história?"
+
 NUNCA use: "reflete uma sociedade", "é fascinante", "nos ensina que", "é importante".
 NUNCA termine com reticências (...).
 {tone_instruction}
 Máximo {content_cfg['comment_max_chars']} caracteres.
 
-HASHTAGS — 3 a 5 hashtags relevantes.
+HASHTAGS — 3 a 5 hashtags relevantes, com o caractere #.
 
-YOUTUBE_TITLE — Título do Short para o YouTube. Máximo 70 caracteres.
+YOUTUBE_TITLE — Título do Short para o YouTube. Máximo 95 caracteres.
+- Deve chamar atenção, usar o hook como base mas pode ser ligeiramente diferente.
+- Sempre com 3 hashtags que facilitem o SEO ao final.
 
-YOUTUBE_DESCRIPTION — Descrição do Short. 3 a 5 linhas.
-- Primeira linha: expansão do hook (1 frase impactante).
-- Segunda linha: o que o espectador vai descobrir assistindo.
-- Terceira linha: as hashtags separadas por espaço."""
+YOUTUBE_DESCRIPTION — Descrição do Short, na ordem. Deve ser um parágrafo com 4 ou 5 linhas
+- Expansão do hook.
+- O que o espectador vai descobrir assistindo.
+- As hashtags separadas por espaço no idioma do texto (com #).
+- Sem emojis."""
 
     # ── Mensagens por modo ────────────────────────────────────────────────────
 

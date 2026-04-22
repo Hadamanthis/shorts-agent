@@ -1,13 +1,13 @@
 import {
   AbsoluteFill,
-  OffthreadVideo,
   staticFile,
   Img,
   useCurrentFrame,
   useVideoConfig,
   interpolate,
 } from 'remotion';
-import { Html5Audio, Html5Video } from 'remotion';
+import { Html5Audio } from 'remotion';
+import { Video } from '@remotion/media';
 
 export type ComentarioImagemProps = {
   hook: string;
@@ -29,18 +29,24 @@ const stripPunctuation = (tok: string): string =>
 const buildHighlightedIndices = (tokens: string[], highlights: string[]): Set<number> => {
   const indices = new Set<number>();
   if (highlights.length === 0) return indices;
-  const hlPhrases = highlights.map(hl => hl.trim().split(/\s+/).map(t => t.toLowerCase()));
-  const hlWordSet = new Set(hlPhrases.flat());
-  const wordEntries = tokens.map((tok, i) => ({ tok, i })).filter(({ tok }) => tok.trim().length > 0);
-  for (const { tok, i } of wordEntries) {
-    if (hlWordSet.has(stripPunctuation(tok))) indices.add(i);
-  }
+
+  // Apenas match de frases completas — nunca palavras soltas
+  const hlPhrases = highlights.map(hl =>
+    hl.trim().split(/\s+/).map(t => stripPunctuation(t))
+  );
+
+  const wordEntries = tokens
+    .map((tok, i) => ({ tok, i }))
+    .filter(({ tok }) => tok.trim().length > 0);
+
   for (const hlTokens of hlPhrases) {
-    if (hlTokens.length < 2) continue;
     for (let wi = 0; wi <= wordEntries.length - hlTokens.length; wi++) {
       let match = true;
       for (let k = 0; k < hlTokens.length; k++) {
-        if (stripPunctuation(wordEntries[wi + k].tok) !== hlTokens[k]) { match = false; break; }
+        if (stripPunctuation(wordEntries[wi + k].tok) !== hlTokens[k]) {
+          match = false;
+          break;
+        }
       }
       if (match) {
         const startIdx = wordEntries[wi].i;
@@ -49,6 +55,7 @@ const buildHighlightedIndices = (tokens: string[], highlights: string[]): Set<nu
       }
     }
   }
+
   return indices;
 };
 
@@ -151,16 +158,17 @@ export const ComentarioImagem: React.FC<ComentarioImagemProps> = ({
   return (
     <AbsoluteFill style={{ backgroundColor: '#000' }}>
 
-      {/* FUNDO — Html5Video evita o bug de timebase do compositor Rust */}
-      <OffthreadVideo
+      {/* FUNDO — Loop garante que o bg reinicia antes do fim, evitando "No frame found" */}
+      <Video
         src={staticFile(bgVideo)}
-        style={{ width: '100%', height: '100%', objectFit: 'cover', opacity: 0.70 }}
-        playbackRate={1}
+        loop
         muted
+        style={{ width: '100%', height: '100%', objectFit: 'cover', opacity: 0.70 }}
       />
+      
       <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(180deg, rgba(0,0,0,0.55) 0%, rgba(0,0,0,0.80) 100%)' }} />
 
-      {music && <Html5Audio src={staticFile(music)} volume={0.18} loop />}
+      {music && <Html5Audio src={staticFile(music)} volume={0.25} loop />}
 
       <ProgressBar />
 

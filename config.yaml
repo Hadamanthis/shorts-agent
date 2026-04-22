@@ -1,122 +1,57 @@
-# =============================================================================
-# SHORTS AGENT — Configuração Principal
-# =============================================================================
-
-# -----------------------------------------------------------------------------
-# PERFIS DE CANAL
-# -----------------------------------------------------------------------------
 profiles:
   Synthvator:
-    language: "pt-BR"
-    niche: "filmes e séries"
-    account_name: "SynthvatorComenta"
-    avatar_path: "assets/profiles/synthvator.png"
-    background_video: "assets/backgrounds/bg_default.mp4"
-    music_path: "assets/music/bg_music.mp3"
-
+    language: pt-BR
+    niche: curiosidades
+    account_name: SynthvatorComenta
+    avatar_path: assets/profiles/synthvator.png
+    background_video: assets/backgrounds/bg_default.mp4
+    music_path: assets/music/bg_music.mp3
+    comment_tone: humoristico
   Tenebrosia:
-    language: "pt-BR"
-    niche: "mistérios e terror"
-    account_name: "Tenebrosia"
-    avatar_path: "assets/profiles/synthvator.png"
-    background_video: "assets/backgrounds/bg_default.mp4"
-    music_path: "assets/music/bg_music.mp3"
-
+    language: pt-BR
+    niche: mistérios e terror
+    account_name: TenebrosiaComenta
+    avatar_path: assets/profiles/tenebrosia.png
+    background_video: assets/backgrounds/bg_tenebrosia.mp4
+    music_path: assets/music/bg_music_tenebrosia.mp3
+    comment_tone: assutado
   FilmFactsEN:
-    language: "en-US"
-    niche: "movies and pop culture"
-    account_name: "filmfacts.clip"
-    avatar_path: "assets/profiles/avatar_en.png"
-    background_video: "assets/backgrounds/bg_default.mp4"
-    music_path: "assets/music/bg_music.mp3"
-
-# -----------------------------------------------------------------------------
-# CONTEÚDO GERADO PELO LLM
-# -----------------------------------------------------------------------------
+    language: en-US
+    niche: movies and pop culture
+    account_name: filmfacts.clip
+    avatar_path: assets/profiles/avatar_en.png
+    background_video: assets/backgrounds/bg_default.mp4
+    music_path: assets/music/bg_music.mp3
+    comment_tone: humoristico
 content:
-  # Tamanho máximo do hook (zona 1) em caracteres
   curiosity_max_chars: 120
-
-  # Tamanho máximo do comentário (zona 3) em caracteres
   comment_max_chars: 200
-
-  # Tom do comentário: "surpreso" | "humoristico" | "reflexivo" | "emocional"
-  comment_tone: "humoristico"
-
-# -----------------------------------------------------------------------------
-# LAYOUT DO SHORT (card 9:16)
-# -----------------------------------------------------------------------------
 layout:
   width: 1080
   height: 1920
   fps: 30
-
-# -----------------------------------------------------------------------------
-# GROQ API
-# -----------------------------------------------------------------------------
 groq:
   temperature: 0.8
   max_tokens: 512
-
-# -----------------------------------------------------------------------------
-# PIPELINE — Etapas ativas
-# -----------------------------------------------------------------------------
 pipeline:
-  run_ingestion:   true
+  run_ingestion: true
   run_intelligence: true
-  run_asset_prep:  true
-  run_render:      true
-  run_output:      true
-
-# -----------------------------------------------------------------------------
-# COMENTARIO-REDDIT
-# Usado pelo template comentario-reddit (imagem ou vídeo do Reddit).
-# O subreddit padrão aqui é sobrescrito por --subreddit na CLI.
-# -----------------------------------------------------------------------------
+  run_asset_prep: true
+  run_render: true
+  run_output: true
 comentario-reddit:
-  # Subreddit padrão (sobrescrito por --subreddit na CLI)
-  subreddit: "interestingasfuck"
-
-  # Tipo de listing: hot | top | rising
-  listing: "hot"
-
-  # Filtro de tempo para listing=top: hour | day | week | month | year | all
-  time_filter: "day"
-
-  # Score mínimo do post para aparecer na listagem
-  min_score: 500
-
-  # Quantos posts buscar do Reddit (afeta variedade na paginação)
+  subreddit: interestingasfuck
+  listing: top
+  time_filter: month
+  min_score: 200
   fetch_limit: 50
-
-  # Máximo de comentários do Reddit para contexto do LLM
   max_comments: 10
-
-  # Duração máxima de vídeos aceitos na listagem (segundos) — 180 = 3 min
   max_post_duration: 180
-
-  # Duração máxima do trecho recortado do vídeo (segundos)
   max_clip_duration: 30
-
-  # Ponto de início do recorte no vídeo original (segundos)
   clip_start_offset: 0
-
-  # Duração fixa do short gerado para posts de imagem (segundos)
   short_duration: 30
-
-# -----------------------------------------------------------------------------
-# COMENTARIO-YOUTUBE
-# Usado pelo template comentario-youtube.
-# -----------------------------------------------------------------------------
 comentario-youtube:
-  # Número máximo de comentários a coletar do YouTube
   max_comments_to_fetch: 20
-
-  # Comentários mais curtidos a usar como contexto do LLM
   top_comments_for_context: 10
-
-  # Duração máxima do trecho recortado (segundos)
   max_clip_duration: 30
-
-  # Ponto de início do recorte (segundos)
   clip_start_offset: 0
