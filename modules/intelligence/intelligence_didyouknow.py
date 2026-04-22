@@ -46,15 +46,22 @@ class DYKIntelligenceModule:
 {lang_instruction}
 Sua única saída é um objeto JSON válido, sem texto antes ou depois, sem markdown.
 
-Gere {num_facts} fatos fascinantes e surpreendentes sobre o tópico fornecido.
+Gere {num_facts} fatos sobre "{topic}" que, juntos, contam uma história envolvente — não uma lista mecânica.
 
-Para cada fato:
-- TEXT: O fato em si. Conciso, impactante, surpreendente. 1-2 frases. Máximo 130 caracteres.
-  - NÃO comece com "Sabia que", "Você sabia" ou variações.
-  - Use números, datas, locais específicos quando possível.
-  - Pesquise para garantir que é factual.
-- IMAGE_QUERY: Uma query em inglês para Pexels que retorne uma imagem portrait/vertical
-  relevante para o fato. 2-4 palavras. Ex: "ancient roman architecture", "deep ocean creatures".
+Estrutura narrativa obrigatória:
+- Fato 1 (gancho): Um fato que quebra uma expectativa ou revela algo contra-intuitivo. Deve fisgar.
+- Fatos intermediários: Aprofundam, revelam detalhes humanos, contradizem o senso comum, constroem tensão.
+- Último fato (desfecho): Uma virada, consequência marcante ou perspectiva que muda tudo.
+
+Regras para cada fato (TEXT):
+- 1-2 frases conversacionais. Máximo 150 caracteres.
+- Escreva como alguém contando uma descoberta fascinante num papo, não como verbete de enciclopédia.
+- Use números, datas, nomes de lugares e pessoas reais.
+- Os fatos devem se conectar — o leitor deve sentir que está descobrindo uma história, não lendo uma lista.
+- NUNCA comece com "Sabia que", "Você sabia", "É importante", "Fascinante".
+
+IMAGE_QUERY: Query em inglês para busca de foto portrait no Pexels/Unsplash. 2-4 palavras específicas.
+Ex: "ancient roman aqueduct", "deep ocean bioluminescence", "1960s NASA control room".
 
 Retorne SOMENTE este JSON:
 {{
