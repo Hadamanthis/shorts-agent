@@ -243,7 +243,10 @@ function FactCard({
 
       {/* Image candidates */}
       {fact.candidates.length > 0 ? (
-        <div style={fc.images}>
+        <div style={{
+          ...fc.images,
+          gridTemplateColumns: `repeat(${Math.min(fact.candidates.length, 3)}, 1fr)`,
+        }}>
           {fact.candidates.map((url, j) => (
             <div
               key={j}
