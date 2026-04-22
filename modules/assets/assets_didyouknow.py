@@ -71,7 +71,10 @@ class DYKAssetsModule:
             f"?query={urllib.parse.quote(query)}"
             f"&per_page={per_page}&orientation=portrait"
         )
-        req = urllib.request.Request(url, headers={"Authorization": self._pexels})
+        req = urllib.request.Request(url, headers={
+            "Authorization": self._pexels,
+            "User-Agent": "shorts-agent/1.0",
+        })
         with urllib.request.urlopen(req, timeout=10) as resp:
             data = json.loads(resp.read())
         return [p["src"]["large"] for p in data.get("photos", [])]
